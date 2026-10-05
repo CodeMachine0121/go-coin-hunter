@@ -43,6 +43,9 @@ func TestRepositoriesReportStorageFailures(t *testing.T) {
 	failures["create candidates"] = coinCandidateRepository.CreateAll(executionContext, []entities.CoinCandidate{{CoinSymbol: "CT"}})
 	_, failures["find candidates"] = coinCandidateRepository.FindByPipelineRunID(executionContext, 1)
 	failures["create outcomes"] = outcomeRepository.CreateAll(executionContext, []entities.InformationSourceOutcome{{SourceName: "s"}})
+	_, failures["find declared contracts"] = coinIntelligenceRepository.FindDeclaredContractAddresses(executionContext, []string{"CT"})
+	failures["create filter results"] = persistence.NewCoinFilterResultRepository(database).CreateAll(executionContext, []entities.CoinFilterResult{{CoinSymbol: "CT"}})
+	_, failures["find filter results"] = persistence.NewCoinFilterResultRepository(database).FindByPipelineRunID(executionContext, 1)
 	failures["migrate"] = persistence.NewSchemaMigrator(database).Migrate()
 
 	for step, failure := range failures {
@@ -56,6 +59,7 @@ func TestEmptyBatchesNeverTouchStorage(t *testing.T) {
 	assert.NoError(t, persistence.NewCoinIntelligenceRepository(database).SaveNew(context.Background(), nil))
 	assert.NoError(t, persistence.NewInformationSourceOutcomeRepository(database).CreateAll(context.Background(), nil))
 	assert.NoError(t, persistence.NewCoinCandidateRepository(database).CreateAll(context.Background(), nil))
+	assert.NoError(t, persistence.NewCoinFilterResultRepository(database).CreateAll(context.Background(), nil))
 }
 
 func TestNewDatabaseFailsWhenTheServerIsUnreachable(t *testing.T) {

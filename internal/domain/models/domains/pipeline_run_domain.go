@@ -40,6 +40,18 @@ func (pipelineRunDomain PipelineRunDomain) ConcludeDiscovery(
 	return pipelineRun
 }
 
+// ConcludeFiltering: keeping any candidate is success, keeping none is no data.
+func (pipelineRunDomain PipelineRunDomain) ConcludeFiltering(keptCoinCount int, finishedAt time.Time) entities.PipelineRun {
+	pipelineRun := pipelineRunDomain.pipelineRun
+	pipelineRun.Status = string(vo.PipelineRunStatusSucceeded)
+	if keptCoinCount == 0 {
+		pipelineRun.Status = string(vo.PipelineRunStatusNoData)
+	}
+	pipelineRun.FinishedAt = &finishedAt
+
+	return pipelineRun
+}
+
 func (pipelineRunDomain PipelineRunDomain) Fail(failureReason string, finishedAt time.Time) entities.PipelineRun {
 	pipelineRun := pipelineRunDomain.pipelineRun
 	pipelineRun.Status = string(vo.PipelineRunStatusFailed)

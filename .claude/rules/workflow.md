@@ -17,6 +17,7 @@
 
 ## 版控
 
+- 本 repo 的 author / committer 一律是 `codemachine0121 <CodeMachine0121@gmail.com>`（已設在 repo 的 local git config，勿改）。
 - 一律在 **feature branch** 開發（`feature/{feature-slug}`），不直接在 `main` 上 commit。
 - **每完成一個段落（一個實作步驟、一份文件、一次 App 組裝）就 commit 一次**，不累積成大 commit。
 - commit message 遵循 **Conventional Commits**，**一律英文**（`feat(scope): ...`、`docs: ...`、`refactor: ...`、`test: ...`）。

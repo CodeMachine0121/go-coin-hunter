@@ -72,6 +72,15 @@ func TestInsightCandidateSelection(t *testing.T) {
 	}
 	assert.Equal(t, []string{"EARLY", "ALPHA", "BETA"}, symbols)
 	assert.Len(t, domains.NewInsightCandidateSelectionDomain(20).SelectKeptResults(coinFilterResults, coinCandidates), 4)
+
+	withUnknown := domains.NewInsightCandidateSelectionDomain(20).SelectKeptResults(
+		append(coinFilterResults, entities.CoinFilterResult{CoinSymbol: "AAA", IsKept: true}), coinCandidates)
+	assert.Equal(t, "AAA", withUnknown[len(withUnknown)-1].CoinSymbol)
+	assert.Equal(t, "EARLY", withUnknown[0].CoinSymbol)
+
+	unknownFirst := domains.NewInsightCandidateSelectionDomain(20).SelectKeptResults(
+		append([]entities.CoinFilterResult{{CoinSymbol: "AAA", IsKept: true}}, coinFilterResults...), coinCandidates)
+	assert.Equal(t, "AAA", unknownFirst[len(unknownFirst)-1].CoinSymbol)
 }
 
 func TestConcludeInsight(t *testing.T) {

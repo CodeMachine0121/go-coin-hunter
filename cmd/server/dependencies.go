@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/application"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/config"
@@ -74,6 +73,15 @@ func coinProfileServiceFor(database *gorm.DB, applicationConfig config.Applicati
 	)
 }
 
+// perpetualMarketStructureProxiesFor lists the exchanges in the order the insight rules prefer: Binance, Bybit, OKX.
+func perpetualMarketStructureProxiesFor(httpClient *http.Client, discoveryConfig config.DiscoveryConfig) []domaininterface.IPerpetualMarketStructureProxy {
+	return []domaininterface.IPerpetualMarketStructureProxy{
+		marketdata.NewBinancePerpetualMarketStructureProxy(httpClient, discoveryConfig.BinanceFuturesUrl),
+		marketdata.NewBybitPerpetualMarketStructureProxy(httpClient, discoveryConfig.BybitBaseUrl),
+		marketdata.NewOkxPerpetualMarketStructureProxy(httpClient, discoveryConfig.OkxBaseUrl),
+	}
+}
+
 // coinInsightServiceFor wires the analyst and its material sources; market structure exchanges are listed in priority order.
 func coinInsightServiceFor(database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy) *service.CoinInsightService {
 	httpClient := &http.Client{}
@@ -81,10 +89,10 @@ func coinInsightServiceFor(database *gorm.DB, applicationConfig config.Applicati
 		MaximumCoinsPerRound:        applicationConfig.Insight.MaximumCoinsPerRound,
 		MaximumConcurrentAnalyses:   applicationConfig.Insight.MaximumConcurrentAnalyses,
 		IntelligenceWindow:          applicationConfig.Discovery.Window,
-		MaximumIntelligenceHeadline: 20,
-		NewsLookback:                72 * time.Hour,
-		MaximumNewsHeadlines:        10,
-		SourceRequestTimeout:        15 * time.Second,
+		MaximumIntelligenceHeadline: applicationConfig.Insight.MaximumIntelligenceHeadlines,
+		NewsLookback:                applicationConfig.Insight.NewsLookback,
+		MaximumNewsHeadlines:        applicationConfig.Insight.MaximumNewsHeadlines,
+		SourceRequestTimeout:        applicationConfig.Insight.MaterialSourceTimeout,
 	}
 
 	return service.NewCoinInsightService(
@@ -95,16 +103,12 @@ func coinInsightServiceFor(database *gorm.DB, applicationConfig config.Applicati
 		service.NewCoinInsightMaterialService(
 			persistence.NewCoinIntelligenceRepository(database),
 			news.NewGoogleNewsCoinNewsProxy(httpClient, applicationConfig.Insight.GoogleNewsBaseUrl),
-			[]domaininterface.IPerpetualMarketStructureProxy{
-				marketdata.NewBinancePerpetualMarketStructureProxy(httpClient, applicationConfig.Discovery.BinanceFuturesUrl),
-				marketdata.NewBybitPerpetualMarketStructureProxy(httpClient, applicationConfig.Discovery.BybitBaseUrl),
-				marketdata.NewOkxPerpetualMarketStructureProxy(httpClient, applicationConfig.Discovery.OkxBaseUrl),
-			},
+			perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
 			coinInsightPolicy,
 		),
 		insight.NewClaudeCoinInsightAnalystProxy(
 			applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
-			applicationConfig.Insight.Model, applicationConfig.Insight.Effort, applicationConfig.Insight.AnalysisTimeout, 2),
+			applicationConfig.Insight.Model, applicationConfig.Insight.Effort, applicationConfig.Insight.AnalysisTimeout),
 		clockProxy,
 		coinInsightPolicy,
 	)

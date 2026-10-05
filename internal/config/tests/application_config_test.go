@@ -59,6 +59,21 @@ func TestLoadReadsFilteringThresholds(t *testing.T) {
 	assert.Equal(t, 2*time.Second, filteringConfig.TokenSecurityRequestInterval)
 }
 
+func TestLoadInsightDefaults(t *testing.T) {
+	for _, name := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "INSIGHT_MODEL", "INSIGHT_EFFORT",
+		"INSIGHT_MAX_CONCURRENT_ANALYSES", "INSIGHT_MAX_COINS_PER_ROUND", "GOOGLE_NEWS_BASE_URL"} {
+		t.Setenv(name, "")
+	}
+
+	insightConfig := config.Load().Insight
+
+	assert.Equal(t, config.InsightConfig{
+		Model: "claude-opus-5-5", Effort: "low", AnalysisTimeout: 120 * time.Second, MaximumConcurrentAnalyses: 3, MaximumCoinsPerRound: 20,
+		GoogleNewsBaseUrl: "https://news.google.com", MaximumIntelligenceHeadlines: 20, MaximumNewsHeadlines: 10,
+		NewsLookback: 72 * time.Hour, MaterialSourceTimeout: 15 * time.Second,
+	}, insightConfig)
+}
+
 func TestLoadReadsInsightSettings(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("INSIGHT_MODEL", "")

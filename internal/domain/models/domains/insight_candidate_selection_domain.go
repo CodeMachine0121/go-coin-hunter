@@ -31,9 +31,17 @@ func (insightCandidateSelectionDomain InsightCandidateSelectionDomain) SelectKep
 			keptResults = append(keptResults, coinFilterResult)
 		}
 	}
+	// A kept coin with no candidate record has no first mention and goes after every coin that has one.
 	slices.SortStableFunc(keptResults, func(left, right entities.CoinFilterResult) int {
-		if comparison := coinCandidateBySymbol[left.CoinSymbol].EarliestMentionedAt.Compare(
-			coinCandidateBySymbol[right.CoinSymbol].EarliestMentionedAt); comparison != 0 {
+		leftCandidate, leftKnown := coinCandidateBySymbol[left.CoinSymbol]
+		rightCandidate, rightKnown := coinCandidateBySymbol[right.CoinSymbol]
+		if leftKnown != rightKnown {
+			if leftKnown {
+				return -1
+			}
+			return 1
+		}
+		if comparison := leftCandidate.EarliestMentionedAt.Compare(rightCandidate.EarliestMentionedAt); comparison != 0 {
 			return comparison
 		}
 		return strings.Compare(left.CoinSymbol, right.CoinSymbol)

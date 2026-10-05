@@ -64,7 +64,7 @@ const readableAnswer = `{"direction":"bullish","strength":7,"catalyst":"幣安�
 func TestClaudeAnalystReadsAnAnswerAndAsksInTheAgreedShape(t *testing.T) {
 	fakeApi := &fakeMessagesApi{}
 	proxy := insight.NewClaudeCoinInsightAnalystProxy("test-key", fakeApi.serve(t, http.StatusOK, "end_turn", readableAnswer),
-		"claude-opus-5-5", "low", 5*time.Second, 0)
+		"claude-opus-5-5", "low", 5*time.Second)
 
 	answer, analyzeError := proxy.AnalyzeCoin(context.Background(), pengu())
 
@@ -114,7 +114,7 @@ func TestClaudeAnalystTellsUnusableAnswersFromServiceErrors(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			fakeApi := &fakeMessagesApi{}
 			proxy := insight.NewClaudeCoinInsightAnalystProxy("test-key", fakeApi.serve(t, testCase.statusCode, testCase.stopReason, testCase.answerText),
-				"claude-opus-5-5", "low", 5*time.Second, 0)
+				"claude-opus-5-5", "low", 5*time.Second)
 
 			_, analyzeError := proxy.AnalyzeCoin(context.Background(), vo.CoinInsightMaterialVo{CoinSymbol: "PENGU"})
 
@@ -124,6 +124,42 @@ func TestClaudeAnalystTellsUnusableAnswersFromServiceErrors(t *testing.T) {
 	}
 }
 
+func TestClaudeAnalystMakesExactlyOneCallPerQuestionAndKeepsTheKeyOutOfErrors(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = writer.Write([]byte(`{"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}`))
+	}))
+	t.Cleanup(server.Close)
+	proxy := insight.NewClaudeCoinInsightAnalystProxy("sk-ant-secret-test-key", server.URL, "claude-opus-5-5", "low", 5*time.Second)
+
+	_, analyzeError := proxy.AnalyzeCoin(context.Background(), vo.CoinInsightMaterialVo{CoinSymbol: "PENGU"})
+
+	require.Error(t, analyzeError)
+	assert.Equal(t, 1, requestCount)
+	assert.False(t, errors.Is(analyzeError, domains.ErrCoinInsightAnswerUnusable))
+	assert.NotContains(t, analyzeError.Error(), "sk-ant-secret-test-key")
+}
+
+func TestClaudeAnalystGivesUpAtItsDeadline(t *testing.T) {
+	released := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-released }))
+	t.Cleanup(func() {
+		close(released)
+		server.Close()
+	})
+	proxy := insight.NewClaudeCoinInsightAnalystProxy("test-key", server.URL, "claude-opus-5-5", "low", 100*time.Millisecond)
+	startedAt := time.Now()
+
+	_, analyzeError := proxy.AnalyzeCoin(context.Background(), vo.CoinInsightMaterialVo{CoinSymbol: "PENGU"})
+
+	require.Error(t, analyzeError)
+	assert.ErrorIs(t, analyzeError, context.DeadlineExceeded)
+	assert.Less(t, time.Since(startedAt), time.Second)
+}
+
 func TestClaudeAnalystUsesTheDefaultEndpointWithoutABaseAddress(t *testing.T) {
-	assert.NotNil(t, insight.NewClaudeCoinInsightAnalystProxy("test-key", "", "claude-opus-5-5", "low", time.Second, 0))
+	assert.NotNil(t, insight.NewClaudeCoinInsightAnalystProxy("test-key", "", "claude-opus-5-5", "low", time.Second))
 }

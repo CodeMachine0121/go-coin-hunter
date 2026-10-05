@@ -30,6 +30,11 @@ type InsightConfig struct {
 	MaximumConcurrentAnalyses int
 	MaximumCoinsPerRound      int
 	GoogleNewsBaseUrl         string
+	// The material limits are fixed rules of the insight step, not operator settings.
+	MaximumIntelligenceHeadlines int
+	MaximumNewsHeadlines         int
+	NewsLookback                 time.Duration
+	MaterialSourceTimeout        time.Duration
 }
 
 type DatabaseConfig struct {
@@ -128,14 +133,18 @@ func Load() ApplicationConfig {
 			DexScreenerBaseUrl:   cmp.Or(os.Getenv("DEXSCREENER_BASE_URL"), "https://api.dexscreener.com"),
 		},
 		Insight: InsightConfig{
-			AnthropicApiKey:           os.Getenv("ANTHROPIC_API_KEY"),
-			AnthropicBaseUrl:          os.Getenv("ANTHROPIC_BASE_URL"),
-			Model:                     cmp.Or(os.Getenv("INSIGHT_MODEL"), "claude-opus-5-5"),
-			Effort:                    cmp.Or(os.Getenv("INSIGHT_EFFORT"), "low"),
-			AnalysisTimeout:           insightAnalysisTimeout,
-			MaximumConcurrentAnalyses: parsePositiveIntWithDefault(os.Getenv("INSIGHT_MAX_CONCURRENT_ANALYSES"), 3),
-			MaximumCoinsPerRound:      parsePositiveIntWithDefault(os.Getenv("INSIGHT_MAX_COINS_PER_ROUND"), 20),
-			GoogleNewsBaseUrl:         cmp.Or(os.Getenv("GOOGLE_NEWS_BASE_URL"), "https://news.google.com"),
+			AnthropicApiKey:              os.Getenv("ANTHROPIC_API_KEY"),
+			AnthropicBaseUrl:             os.Getenv("ANTHROPIC_BASE_URL"),
+			Model:                        cmp.Or(os.Getenv("INSIGHT_MODEL"), "claude-opus-5-5"),
+			Effort:                       cmp.Or(os.Getenv("INSIGHT_EFFORT"), "low"),
+			AnalysisTimeout:              insightAnalysisTimeout,
+			MaximumConcurrentAnalyses:    parsePositiveIntWithDefault(os.Getenv("INSIGHT_MAX_CONCURRENT_ANALYSES"), 3),
+			MaximumCoinsPerRound:         parsePositiveIntWithDefault(os.Getenv("INSIGHT_MAX_COINS_PER_ROUND"), 20),
+			GoogleNewsBaseUrl:            cmp.Or(os.Getenv("GOOGLE_NEWS_BASE_URL"), "https://news.google.com"),
+			MaximumIntelligenceHeadlines: 20,
+			MaximumNewsHeadlines:         10,
+			NewsLookback:                 72 * time.Hour,
+			MaterialSourceTimeout:        15 * time.Second,
 		},
 		Filtering: FilteringConfig{
 			MaximumTaxRate:                  parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_TAX_RATE"), "0.1"),

@@ -60,11 +60,12 @@ type ClaudeCoinInsightAnalystProxy struct {
 	requestTimeout time.Duration
 }
 
-// NewClaudeCoinInsightAnalystProxy uses the SDK's default endpoint when the base address is empty.
+// NewClaudeCoinInsightAnalystProxy uses the SDK's default endpoint when the base address is empty. The SDK's own
+// retries are switched off: a failing service is not asked again, and each question costs exactly one call.
 func NewClaudeCoinInsightAnalystProxy(
-	apiKey string, baseUrl string, model string, effort string, requestTimeout time.Duration, maximumRetries int,
+	apiKey string, baseUrl string, model string, effort string, requestTimeout time.Duration,
 ) *ClaudeCoinInsightAnalystProxy {
-	clientOptions := []option.RequestOption{option.WithAPIKey(apiKey), option.WithMaxRetries(maximumRetries)}
+	clientOptions := []option.RequestOption{option.WithAPIKey(apiKey), option.WithMaxRetries(0)}
 	if baseUrl != "" {
 		clientOptions = append(clientOptions, option.WithBaseURL(baseUrl))
 	}

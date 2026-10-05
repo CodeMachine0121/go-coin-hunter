@@ -439,3 +439,62 @@ func TestGetCoinInsights(t *testing.T) {
 		}
 	})
 }
+
+func TestAnalyzeCoinCandidatesShowsAtMostTheHeadlineLimit(t *testing.T) {
+	controller := gomock.NewController(t)
+	underTest := newCoinInsightUnderTest(t, insightPolicy(), "PENGU")
+	manyIntelligences := []entities.CoinIntelligence{}
+	for index := range 25 {
+		manyIntelligences = append(manyIntelligences, entities.CoinIntelligence{SourceName: "s", CoinSymbol: "PENGU", Title: fmt.Sprintf("headline %02d", index), PublishedAt: insightStartedAt})
+	}
+	coinIntelligences := mocks.NewMockICoinIntelligenceRepository(controller)
+	coinIntelligences.EXPECT().FindByCoinSymbolsSince(gomock.Any(), []string{"PENGU"}, insightStartedAt.Add(-72*time.Hour)).Return(manyIntelligences, nil)
+	underTest.answerMaterialSources()
+	shownHeadlines := 0
+	underTest.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, material vo.CoinInsightMaterialVo) (vo.CoinInsightAnswerVo, error) {
+			shownHeadlines = len(material.IntelligenceHeadlines)
+			return bullishAnswer(), nil
+		})
+	candidates := mocks.NewMockICoinCandidateRepository(controller)
+	candidates.EXPECT().FindByPipelineRunID(gomock.Any(), gomock.Any()).Return(nil, nil)
+	clockProxy := mocks.NewMockIClockProxy(controller)
+	clockProxy.EXPECT().Now().Return(insightStartedAt).AnyTimes()
+	coinInsightApplication := application.NewCoinInsightApplication(service.NewCoinInsightService(
+		underTest.pipelineRunRepository, candidates, underTest.coinFilterResults, underTest.coinInsights,
+		service.NewCoinInsightMaterialService(coinIntelligences, underTest.coinNews,
+			[]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, insightPolicy()),
+		underTest.analyst, clockProxy, insightPolicy()))
+
+	_, analyzeError := coinInsightApplication.AnalyzeCoinCandidatesManually(context.Background())
+
+	require.NoError(t, analyzeError)
+	assert.Equal(t, 20, shownHeadlines)
+}
+
+func TestAnalyzeCoinCandidatesCutsOffASlowMaterialSource(t *testing.T) {
+	policy := insightPolicy()
+	policy.SourceRequestTimeout = 50 * time.Millisecond
+	underTest := newCoinInsightUnderTest(t, policy, "PENGU")
+	waitForDeadline := func(sourceContext context.Context) error {
+		<-sourceContext.Done()
+		return sourceContext.Err()
+	}
+	underTest.coinNews.EXPECT().FindRecentHeadlines(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(sourceContext context.Context, _ string, _ time.Time, _ int) ([]vo.HeadlineVo, error) {
+			return nil, waitForDeadline(sourceContext)
+		})
+	underTest.binanceMarket.EXPECT().FindMarketStructure(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(sourceContext context.Context, _ string) (vo.PerpetualMarketStructureVo, bool, error) {
+			return vo.PerpetualMarketStructureVo{}, false, waitForDeadline(sourceContext)
+		})
+	underTest.bybitMarket.EXPECT().FindMarketStructure(gomock.Any(), gomock.Any()).Return(vo.PerpetualMarketStructureVo{}, false, nil)
+	underTest.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(bullishAnswer(), nil)
+	startedAt := time.Now()
+
+	_, analyzeError := underTest.coinInsightApplication.AnalyzeCoinCandidatesManually(context.Background())
+
+	require.NoError(t, analyzeError)
+	assert.Less(t, time.Since(startedAt), time.Second)
+	assert.Equal(t, []string{"查不到近期新聞", "查不到永續合約市場結構"}, underTest.savedInsight(t, "PENGU").DataGaps)
+}

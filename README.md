@@ -66,6 +66,13 @@ make mock              # 重新產生 mock
 | `FILTER_UNLOCK_LOOKAHEAD_DAYS` | `14` | 解鎖時程觀察天數 |
 | `FILTER_MAXIMUM_UNLOCK_RATIO` | `0.05` | 觀察期內累計解鎖量占流通量的上限（達到即淘汰） |
 | `GOPLUS_BASE_URL` / `DEFILLAMA_DATASETS_BASE_URL` | 各官方網址 | 過濾資料來源網址 |
+| `ANTHROPIC_API_KEY` | 空 | **Claude API 金鑰（洞察需要；呼叫會產生費用）**。未設定時每枚幣都會分析失敗 |
+| `ANTHROPIC_BASE_URL` | 空（官方端點） | Claude API 位址（代理時覆寫） |
+| `INSIGHT_MODEL` | `claude-opus-5-5` | 洞察使用的 Claude 模型 |
+| `INSIGHT_EFFORT` | `low` | 思考深度：`low` / `medium` / `high` / `xhigh` / `max` |
+| `INSIGHT_MAX_CONCURRENT_ANALYSES` | `3` | 同時進行的 AI 分析上限 |
+| `INSIGHT_MAX_COINS_PER_ROUND` | `20` | 每輪最多分析幾枚（取最早被提及的） |
+| `GOOGLE_NEWS_BASE_URL` | `https://news.google.com` | 新聞搜尋位址 |
 
 ## 資訊來源（全部免費、免金鑰）
 
@@ -92,6 +99,12 @@ make mock              # 重新產生 mock
 | 解鎖時程 | DefiLlama 公開 emissions 資料集 |
 | 是否已上永續合約 | 幣安、Bybit、OKX 永續合約清單（只算加密原生 USDT 永續） |
 
+## AI 洞察
+
+每枚保留的候選幣問 Claude 一次（格式不合格重問一次），素材為：情報標題、Google News 近 3 天標題、永續合約市場結構（幣安 → Bybit → OKX 取第一家有合約的：價格、24h 漲跌、成交額、資金費率、持倉量與 24h 變化）、過濾結果。
+請求使用結構化輸出（JSON schema）、可快取的固定系統提示、伺服器端備援模型（政策拒答時改派）。方向與強度一律由 domain 正規化。
+**費用：** 素材全部免費；Claude 呼叫由你的 `ANTHROPIC_API_KEY` 付費，每輪最多 20 枚 × 2 次。
+
 ## API Routes
 
 - `GET /health`
@@ -100,6 +113,9 @@ make mock              # 重新產生 mock
 - `POST /coin-filterings` — 手動觸發一輪過濾（對最新成功探索的候選幣）；從未有成功探索時回 409「尚無成功的探索輪次」
 - `GET /coin-filter-results/latest-kept` — 最新一輪成功過濾後**保留**的候選幣，附六條規則的結果與理由
 - `GET /pipeline-runs/:pipelineRunId/coin-filter-results` — 某一輪過濾的全部結果（含淘汰的幣；非正整數 400、查無輪次 404）
+- `POST /coin-insights` — 手動觸發一輪 AI 洞察（對最新成功過濾保留的候選幣）；從未有成功過濾時回 409「尚無成功的過濾輪次」
+- `GET /coin-insights/latest` — 最新一輪成功洞察的全部洞察（方向、強度、催化劑、風險、證據、資料缺口）
+- `GET /pipeline-runs/:pipelineRunId/coin-insights` — 某一輪洞察的全部結果（含分析失敗的幣與原因）
 - `GET /pipeline-runs` — 管線輪次歷史，新到舊，含各來源結果
 - `GET /pipeline-runs/:pipelineRunId/coin-intelligences` — 某一輪首次保存的情報（非正整數 400、查無輪次 404）
 

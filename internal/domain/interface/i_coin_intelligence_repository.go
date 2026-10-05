@@ -16,6 +16,8 @@ type ICoinIntelligenceRepository interface {
 	// FindPublishedSince includes intelligence published exactly at the given time.
 	FindPublishedSince(executionContext context.Context, publishedSince time.Time) ([]entities.CoinIntelligence, error)
 	FindByPipelineRunID(executionContext context.Context, pipelineRunID uint) ([]entities.CoinIntelligence, error)
+	// FindByCoinSymbolsSince lists the intelligence about those coins published since the given time, newest first.
+	FindByCoinSymbolsSince(executionContext context.Context, coinSymbols []string, publishedSince time.Time) ([]entities.CoinIntelligence, error)
 	// FindDeclaredContractAddresses returns, per coin symbol, the chain and address most recently declared by an on-chain source.
 	FindDeclaredContractAddresses(executionContext context.Context, coinSymbols []string) (map[string]vo.TokenAddressVo, error)
 }

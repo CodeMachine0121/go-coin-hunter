@@ -32,3 +32,13 @@ func (target *jsonDecimal) decimalOrNil() *decimal.Decimal {
 
 	return &value
 }
+
+// changeRatioTo is latest ÷ this − 1; it is unknown unless both readings exist and this one is positive.
+func (oldest *jsonDecimal) changeRatioTo(latest *jsonDecimal) *decimal.Decimal {
+	if oldest == nil || latest == nil || !oldest.value.IsPositive() {
+		return nil
+	}
+	ratio := latest.value.Div(oldest.value).Sub(decimal.NewFromInt(1))
+
+	return &ratio
+}

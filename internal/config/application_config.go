@@ -17,6 +17,24 @@ type ApplicationConfig struct {
 	BackgroundJobsEnabled bool
 	Discovery             DiscoveryConfig
 	Filtering             FilteringConfig
+	Insight               InsightConfig
+}
+
+// InsightConfig holds the AI analyst's settings and the free material sources; the API key is read here and nowhere else.
+type InsightConfig struct {
+	AnthropicApiKey           string
+	AnthropicBaseUrl          string
+	Model                     string
+	Effort                    string
+	AnalysisTimeout           time.Duration
+	MaximumConcurrentAnalyses int
+	MaximumCoinsPerRound      int
+	GoogleNewsBaseUrl         string
+	// The material limits are fixed rules of the insight step, not operator settings.
+	MaximumIntelligenceHeadlines int
+	MaximumNewsHeadlines         int
+	NewsLookback                 time.Duration
+	MaterialSourceTimeout        time.Duration
 }
 
 type DatabaseConfig struct {
@@ -82,6 +100,8 @@ const (
 	filteringRoundBaseBudget = 60 * time.Second
 	// tokenSecurityRequestInterval keeps token security lookups near the free tier's thirty per minute.
 	tokenSecurityRequestInterval = 2 * time.Second
+	// insightAnalysisTimeout bounds one question to the analyst.
+	insightAnalysisTimeout = 120 * time.Second
 )
 
 // defaultExcludedCoinSymbols are majors and stablecoins: never new coins, however often they are mentioned.
@@ -111,6 +131,20 @@ func Load() ApplicationConfig {
 			OkxBaseUrl:           cmp.Or(os.Getenv("OKX_BASE_URL"), "https://www.okx.com"),
 			CoinGeckoBaseUrl:     cmp.Or(os.Getenv("COINGECKO_BASE_URL"), "https://api.coingecko.com"),
 			DexScreenerBaseUrl:   cmp.Or(os.Getenv("DEXSCREENER_BASE_URL"), "https://api.dexscreener.com"),
+		},
+		Insight: InsightConfig{
+			AnthropicApiKey:              os.Getenv("ANTHROPIC_API_KEY"),
+			AnthropicBaseUrl:             os.Getenv("ANTHROPIC_BASE_URL"),
+			Model:                        cmp.Or(os.Getenv("INSIGHT_MODEL"), "claude-opus-5-5"),
+			Effort:                       cmp.Or(os.Getenv("INSIGHT_EFFORT"), "low"),
+			AnalysisTimeout:              insightAnalysisTimeout,
+			MaximumConcurrentAnalyses:    parsePositiveIntWithDefault(os.Getenv("INSIGHT_MAX_CONCURRENT_ANALYSES"), 3),
+			MaximumCoinsPerRound:         parsePositiveIntWithDefault(os.Getenv("INSIGHT_MAX_COINS_PER_ROUND"), 20),
+			GoogleNewsBaseUrl:            cmp.Or(os.Getenv("GOOGLE_NEWS_BASE_URL"), "https://news.google.com"),
+			MaximumIntelligenceHeadlines: 20,
+			MaximumNewsHeadlines:         10,
+			NewsLookback:                 72 * time.Hour,
+			MaterialSourceTimeout:        15 * time.Second,
 		},
 		Filtering: FilteringConfig{
 			MaximumTaxRate:                  parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_TAX_RATE"), "0.1"),

@@ -18,6 +18,7 @@ func TestInformationItemCoinIntelligences(t *testing.T) {
 		informationItem vo.InformationItemVo
 		wantCoinSymbols []string
 		wantPublishedAt time.Time
+		wantContract    string
 	}{
 		{
 			name:            "declared symbols win over the title and are upper-cased",
@@ -28,6 +29,11 @@ func TestInformationItemCoinIntelligences(t *testing.T) {
 			name:            "an announcement naming two coins is one intelligence per coin",
 			informationItem: vo.InformationItemVo{Title: "Binance Will List Zora (ZORA) and Pump (PUMP)", PublishedAt: &publishedAt},
 			wantCoinSymbols: []string{"ZORA", "PUMP"}, wantPublishedAt: publishedAt,
+		},
+		{
+			name:            "a declared contract is carried along",
+			informationItem: vo.InformationItemVo{DeclaredCoinSymbols: []string{"DOUU"}, PublishedAt: &publishedAt, ChainID: "solana", ContractAddress: "DouuMint"},
+			wantCoinSymbols: []string{"DOUU"}, wantPublishedAt: publishedAt, wantContract: "solana:DouuMint",
 		},
 		{
 			name:            "no publish time counts as first received",
@@ -50,6 +56,9 @@ func TestInformationItemCoinIntelligences(t *testing.T) {
 				coinSymbols = append(coinSymbols, coinIntelligence.CoinSymbol)
 				assert.Equal(t, uint(5), coinIntelligence.PipelineRunID)
 				assert.Equal(t, testCase.wantPublishedAt, coinIntelligence.PublishedAt)
+				if testCase.wantContract != "" {
+					assert.Equal(t, testCase.wantContract, coinIntelligence.ChainID+":"+coinIntelligence.ContractAddress)
+				}
 			}
 			assert.Equal(t, testCase.wantCoinSymbols, coinSymbols)
 		})

@@ -52,6 +52,8 @@ func (informationItemDomain InformationItemDomain) CoinIntelligences(
 			Link:               informationItem.Link,
 			PublishedAt:        publishedAt,
 			IsTraditionalAsset: informationItem.IsTraditionalAsset,
+			ChainID:            informationItem.ChainID,
+			ContractAddress:    informationItem.ContractAddress,
 		})
 	}
 

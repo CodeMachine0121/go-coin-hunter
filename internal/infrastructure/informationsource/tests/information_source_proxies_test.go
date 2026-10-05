@@ -137,8 +137,8 @@ func TestInformationSourceProxiesNormalizeTheirSources(t *testing.T) {
 				return informationsource.NewDexScreenerTokenProfileInformationSourceProxy(http.DefaultClient, baseUrl)
 			},
 			itemLimit: 1,
-			want: []vo.InformationItemVo{{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:toka", Title: "Douu (DOUU) profiled on solana",
-				Link: "https://dex/a", PublishedAt: millis(1000), DeclaredCoinSymbols: []string{"DOUU"}}},
+			want: []vo.InformationItemVo{{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:TokA", Title: "Douu (DOUU) profiled on solana",
+				Link: "https://dex/a", PublishedAt: millis(1000), DeclaredCoinSymbols: []string{"DOUU"}, ChainID: "solana", ContractAddress: "TokA"}},
 		},
 		{
 			name: "dex screener profiles, symbol and earliest pair looked up, unknown token keeps no coin",
@@ -155,9 +155,10 @@ func TestInformationSourceProxiesNormalizeTheirSources(t *testing.T) {
 			},
 			itemLimit: 50,
 			want: []vo.InformationItemVo{
-				{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:toka", Title: "Douu (DOUU) profiled on solana",
-					Link: "https://dex/a", PublishedAt: millis(1000), DeclaredCoinSymbols: []string{"DOUU"}},
-				{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:tokb", Title: "New token profile on solana", Link: "https://dex/b"},
+				{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:TokA", Title: "Douu (DOUU) profiled on solana",
+					Link: "https://dex/a", PublishedAt: millis(1000), DeclaredCoinSymbols: []string{"DOUU"}, ChainID: "solana", ContractAddress: "TokA"},
+				{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:TokB", Title: "New token profile on solana", Link: "https://dex/b",
+					ChainID: "solana", ContractAddress: "TokB"},
 			},
 		},
 	}

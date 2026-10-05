@@ -10,13 +10,12 @@ import (
 	domaininterface "github.com/CodeMachine0121/go-coin-hunter/internal/domain/interface"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/service"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/analysis"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/clock"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/informationsource"
-	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/insight"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/news"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/persistence"
-	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/verdict"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -98,7 +97,9 @@ func coinInsightPolicyFor(applicationConfig config.ApplicationConfig) vo.CoinIns
 }
 
 // coinInsightServiceFor wires the analyst and its material sources; market structure exchanges are listed in priority order.
-func coinInsightServiceFor(database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy) *service.CoinInsightService {
+func coinInsightServiceFor(
+	database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy, claudeAnalysisProxy *analysis.ClaudeAnalysisProxy,
+) *service.CoinInsightService {
 	httpClient := &http.Client{}
 	coinInsightPolicy := coinInsightPolicyFor(applicationConfig)
 
@@ -113,9 +114,7 @@ func coinInsightServiceFor(database *gorm.DB, applicationConfig config.Applicati
 			perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
 			coinInsightPolicy,
 		),
-		insight.NewClaudeCoinInsightAnalystProxy(
-			applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
-			applicationConfig.Insight.Model, applicationConfig.Insight.Effort, applicationConfig.Insight.AnalysisTimeout),
+		claudeAnalysisProxy,
 		clockProxy,
 		coinInsightPolicy,
 	)
@@ -148,6 +147,10 @@ type applications struct {
 func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConfig) applications {
 	clockProxy := clock.NewSystemClockProxy()
 	pipelineRunRepository := persistence.NewPipelineRunRepository(database)
+	// One way out to Claude for both the insight analyst and the chief investment officer.
+	claudeAnalysisProxy := analysis.NewClaudeAnalysisProxy(applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
+		analysis.ClaudeModelSettings{Model: applicationConfig.Insight.Model, Effort: applicationConfig.Insight.Effort, RequestTimeout: applicationConfig.Insight.AnalysisTimeout},
+		analysis.ClaudeModelSettings{Model: applicationConfig.Verdict.Model, Effort: applicationConfig.Verdict.Effort, RequestTimeout: applicationConfig.Verdict.SynthesisTimeout})
 	coinCandidateRepository := persistence.NewCoinCandidateRepository(database)
 
 	return applications{
@@ -173,15 +176,14 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 			filterHandlersFor(applicationConfig.Filtering),
 			clockProxy,
 		)),
-		coinInsight: application.NewCoinInsightApplication(coinInsightServiceFor(database, applicationConfig, clockProxy)),
+		coinInsight: application.NewCoinInsightApplication(coinInsightServiceFor(database, applicationConfig, clockProxy, claudeAnalysisProxy)),
 		huntVerdict: application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 			pipelineRunRepository,
 			persistence.NewCoinInsightRepository(database),
 			persistence.NewCoinVerdictRepository(database),
 			persistence.NewHuntBoardRepository(database),
 			perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
-			verdict.NewClaudeHuntVerdictStrategistProxy(applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
-				applicationConfig.Verdict.Model, applicationConfig.Verdict.Effort, applicationConfig.Verdict.SynthesisTimeout),
+			claudeAnalysisProxy,
 			clockProxy,
 			huntVerdictPolicyFor(applicationConfig.Verdict),
 		)),

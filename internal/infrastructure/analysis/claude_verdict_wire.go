@@ -1,4 +1,4 @@
-package verdict
+package analysis
 
 import (
 	"encoding/json"
@@ -18,41 +18,13 @@ type huntVerdictMaterialWire struct {
 	MarketStructure *marketStructureWire `json:"marketStructure"`
 }
 
-// marketStructureWire keeps figures as exact decimal text; an unknown figure is null.
-type marketStructureWire struct {
-	Exchange                   string  `json:"exchange"`
-	LastPrice                  *string `json:"lastPrice"`
-	PriceChangeRatio24h        *string `json:"priceChangeRatio24h"`
-	QuoteVolumeUsd24h          *string `json:"quoteVolumeUsd24h"`
-	FundingRate                *string `json:"fundingRate"`
-	OpenInterestUsd            *string `json:"openInterestUsd"`
-	OpenInterestChangeRatio24h *string `json:"openInterestChangeRatio24h"`
-}
-
 func newHuntVerdictMaterialWires(materials []vo.HuntVerdictMaterialVo) []huntVerdictMaterialWire {
-	decimalText := func(value *decimal.Decimal) *string {
-		if value == nil {
-			return nil
-		}
-		text := value.String()
-		return &text
-	}
 	wires := make([]huntVerdictMaterialWire, 0, len(materials))
 	for _, material := range materials {
 		wire := huntVerdictMaterialWire{CoinSymbol: material.CoinSymbol, Direction: material.Direction, Strength: material.Strength,
 			Catalyst: material.Catalyst, Risks: append([]string{}, material.Risks...), Evidence: append([]string{}, material.Evidence...),
 			DataGaps: append([]string{}, material.DataGaps...)}
-		if marketStructure := material.MarketStructure; marketStructure != nil {
-			wire.MarketStructure = &marketStructureWire{
-				Exchange:                   marketStructure.ExchangeName,
-				LastPrice:                  decimalText(marketStructure.LastPrice),
-				PriceChangeRatio24h:        decimalText(marketStructure.PriceChangeRatio24h),
-				QuoteVolumeUsd24h:          decimalText(marketStructure.QuoteVolumeUsd24h),
-				FundingRate:                decimalText(marketStructure.FundingRate),
-				OpenInterestUsd:            decimalText(marketStructure.OpenInterestUsd),
-				OpenInterestChangeRatio24h: decimalText(marketStructure.OpenInterestChangeRatio24h),
-			}
-		}
+		wire.MarketStructure = newMarketStructureWire(material.MarketStructure)
 		wires = append(wires, wire)
 	}
 

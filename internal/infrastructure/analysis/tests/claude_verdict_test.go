@@ -1,4 +1,4 @@
-package verdict_test
+package analysis_test
 
 import (
 	"context"
@@ -12,19 +12,19 @@ import (
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/domains"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
-	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/verdict"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/analysis"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type fakeMessagesApi struct {
+type fakeVerdictMessagesApi struct {
 	lastBody     map[string]any
 	lastHeader   http.Header
 	requestCount int
 }
 
-func (fakeApi *fakeMessagesApi) serve(t *testing.T, statusCode int, stopReason string, answerText string) string {
+func (fakeApi *fakeVerdictMessagesApi) serve(t *testing.T, statusCode int, stopReason string, answerText string) string {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		fakeApi.requestCount++
 		body, _ := io.ReadAll(request.Body)
@@ -49,17 +49,17 @@ func (fakeApi *fakeMessagesApi) serve(t *testing.T, statusCode int, stopReason s
 const readableVerdicts = `{"verdicts":[{"coinSymbol":"PENGU","action":"long","confidence":72,"leverage":3,"positionSizePercent":4.5,
 	"stopLossPercent":8,"takeProfitPercent":25.5,"rationale":"幣安上新合約","conflictResolution":"無明顯矛盾"}]}`
 
-func pengu() []vo.HuntVerdictMaterialVo {
+func penguVerdictMaterials() []vo.HuntVerdictMaterialVo {
 	lastPrice := decimal.RequireFromString("0.0097")
 	return []vo.HuntVerdictMaterialVo{{CoinSymbol: "PENGU", Direction: "bullish", Strength: 7, Catalyst: "上新合約", Risks: []string{"解鎖"},
 		Evidence: []string{"持倉 +12%"}, DataGaps: []string{}, MarketStructure: &vo.PerpetualMarketStructureVo{ExchangeName: "幣安", LastPrice: &lastPrice}}}
 }
 
 func TestClaudeStrategistReadsVerdictsAndAsksInTheAgreedShape(t *testing.T) {
-	fakeApi := &fakeMessagesApi{}
-	proxy := verdict.NewClaudeHuntVerdictStrategistProxy("test-key", fakeApi.serve(t, http.StatusOK, "end_turn", readableVerdicts), "claude-opus-5-5", "high", 5*time.Second)
+	fakeApi := &fakeVerdictMessagesApi{}
+	proxy := newVerdictProxy("test-key", fakeApi.serve(t, http.StatusOK, "end_turn", readableVerdicts), "claude-opus-5-5", "high", 5*time.Second)
 
-	answers, synthesizeError := proxy.SynthesizeVerdicts(context.Background(), pengu())
+	answers, synthesizeError := proxy.SynthesizeVerdicts(context.Background(), penguVerdictMaterials())
 
 	require.NoError(t, synthesizeError)
 	require.Len(t, answers, 1)
@@ -111,11 +111,11 @@ func TestClaudeStrategistTellsUnusableAnswersFromServiceErrors(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			fakeApi := &fakeMessagesApi{}
-			proxy := verdict.NewClaudeHuntVerdictStrategistProxy("sk-ant-secret", fakeApi.serve(t, testCase.statusCode, testCase.stopReason, testCase.answerText),
+			fakeApi := &fakeVerdictMessagesApi{}
+			proxy := newVerdictProxy("sk-ant-secret", fakeApi.serve(t, testCase.statusCode, testCase.stopReason, testCase.answerText),
 				"claude-opus-5-5", "high", 5*time.Second)
 
-			_, synthesizeError := proxy.SynthesizeVerdicts(context.Background(), pengu())
+			_, synthesizeError := proxy.SynthesizeVerdicts(context.Background(), penguVerdictMaterials())
 
 			require.Error(t, synthesizeError)
 			assert.Equal(t, testCase.wantUnusable, errors.Is(synthesizeError, domains.ErrHuntVerdictAnswerUnusable))
@@ -133,19 +133,19 @@ func TestClaudeStrategistGivesUpAtItsDeadline(t *testing.T) {
 		server.Close()
 	})
 
-	_, synthesizeError := verdict.NewClaudeHuntVerdictStrategistProxy("test-key", server.URL, "claude-opus-5-5", "high", 100*time.Millisecond).
-		SynthesizeVerdicts(context.Background(), pengu())
+	_, synthesizeError := analysis.NewClaudeAnalysisProxy("test-key", server.URL, analysis.ClaudeModelSettings{}, analysis.ClaudeModelSettings{Model: "claude-opus-5-5", Effort: "high", RequestTimeout: 100 * time.Millisecond}).
+		SynthesizeVerdicts(context.Background(), penguVerdictMaterials())
 
 	assert.ErrorIs(t, synthesizeError, context.DeadlineExceeded)
 }
 
 func TestClaudeStrategistUsesTheDefaultEndpointWithoutABaseAddress(t *testing.T) {
-	assert.NotNil(t, verdict.NewClaudeHuntVerdictStrategistProxy("test-key", "", "claude-opus-5-5", "high", time.Second))
+	assert.NotNil(t, analysis.NewClaudeAnalysisProxy("test-key", "", analysis.ClaudeModelSettings{}, analysis.ClaudeModelSettings{Model: "claude-opus-5-5", Effort: "high", RequestTimeout: time.Second}))
 }
 
 func TestClaudeStrategistShowsACoinWithoutMarketStructure(t *testing.T) {
-	fakeApi := &fakeMessagesApi{}
-	proxy := verdict.NewClaudeHuntVerdictStrategistProxy("test-key", fakeApi.serve(t, http.StatusOK, "end_turn", `{"verdicts":[]}`), "claude-opus-5-5", "high", 5*time.Second)
+	fakeApi := &fakeVerdictMessagesApi{}
+	proxy := newVerdictProxy("test-key", fakeApi.serve(t, http.StatusOK, "end_turn", `{"verdicts":[]}`), "claude-opus-5-5", "high", 5*time.Second)
 
 	answers, synthesizeError := proxy.SynthesizeVerdicts(context.Background(), []vo.HuntVerdictMaterialVo{{CoinSymbol: "PONS"}})
 
@@ -153,4 +153,9 @@ func TestClaudeStrategistShowsACoinWithoutMarketStructure(t *testing.T) {
 	assert.Empty(t, answers)
 	userText := fakeApi.lastBody["messages"].([]any)[0].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
 	assert.JSONEq(t, `[{"coinSymbol":"PONS","direction":"","strength":0,"catalyst":"","risks":[],"evidence":[],"dataGaps":[],"marketStructure":null}]`, userText)
+}
+
+// newVerdictProxy builds the analysis proxy with only the verdict capability configured.
+func newVerdictProxy(apiKey string, baseUrl string, model string, effort string, requestTimeout time.Duration) *analysis.ClaudeAnalysisProxy {
+	return analysis.NewClaudeAnalysisProxy(apiKey, baseUrl, analysis.ClaudeModelSettings{}, analysis.ClaudeModelSettings{Model: model, Effort: effort, RequestTimeout: requestTimeout})
 }

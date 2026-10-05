@@ -31,6 +31,7 @@ Application 測試會**連帶測到 domain service 與 domain model**——這�
 **測試依語言慣例放置，但一律與受測 package/專案分離、用外部黑箱視角**：
 
 - 語言支援同 repo 分層目錄的（如 Go）：各層底下開 `tests/` 子資料夾，測試檔用外部 `<pkg>_test` package，`testdata/` 一併放進去。
+- **唯一例外：組裝根**（如 Go 的 `cmd/server`）。它不是分層程式碼，組裝規則（清單順序、設定如何對應到政策）只能從同一個 package 內驗證，測試與它同目錄、同 package。
 - 語言慣用獨立測試專案的（如 .NET / TS）：獨立測試專案，目錄結構鏡射受測專案。
 
 檔名 / package 命名 follow 該語言慣例。

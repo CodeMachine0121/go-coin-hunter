@@ -82,10 +82,9 @@ func perpetualMarketStructureProxiesFor(httpClient *http.Client, discoveryConfig
 	}
 }
 
-// coinInsightServiceFor wires the analyst and its material sources; market structure exchanges are listed in priority order.
-func coinInsightServiceFor(database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy) *service.CoinInsightService {
-	httpClient := &http.Client{}
-	coinInsightPolicy := vo.CoinInsightPolicyVo{
+// coinInsightPolicyFor shows the analyst the intelligence of the discovery window itself, so the two never disagree.
+func coinInsightPolicyFor(applicationConfig config.ApplicationConfig) vo.CoinInsightPolicyVo {
+	return vo.CoinInsightPolicyVo{
 		MaximumCoinsPerRound:        applicationConfig.Insight.MaximumCoinsPerRound,
 		MaximumConcurrentAnalyses:   applicationConfig.Insight.MaximumConcurrentAnalyses,
 		IntelligenceWindow:          applicationConfig.Discovery.Window,
@@ -94,6 +93,12 @@ func coinInsightServiceFor(database *gorm.DB, applicationConfig config.Applicati
 		MaximumNewsHeadlines:        applicationConfig.Insight.MaximumNewsHeadlines,
 		SourceRequestTimeout:        applicationConfig.Insight.MaterialSourceTimeout,
 	}
+}
+
+// coinInsightServiceFor wires the analyst and its material sources; market structure exchanges are listed in priority order.
+func coinInsightServiceFor(database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy) *service.CoinInsightService {
+	httpClient := &http.Client{}
+	coinInsightPolicy := coinInsightPolicyFor(applicationConfig)
 
 	return service.NewCoinInsightService(
 		persistence.NewPipelineRunRepository(database),

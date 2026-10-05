@@ -115,6 +115,7 @@ func TestInsightsOfRunRoute(t *testing.T) {
 		arrange    func(underTest insightRoutesUnderTest)
 		wantStatus int
 		wantError  string
+		wantBody   string
 	}{
 		{name: "a non-numeric run", path: "/pipeline-runs/abc/coin-insights", arrange: func(insightRoutesUnderTest) {},
 			wantStatus: http.StatusBadRequest, wantError: "輪次編號必須是正整數"},
@@ -125,10 +126,10 @@ func TestInsightsOfRunRoute(t *testing.T) {
 			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9}, nil)
 			underTest.coinInsightRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, errors.New("disk"))
 		}, wantStatus: http.StatusInternalServerError},
-		{name: "a known run", path: "/pipeline-runs/9/coin-insights", arrange: func(underTest insightRoutesUnderTest) {
-			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9}, nil)
+		{name: "a run of another step has no insights", path: "/pipeline-runs/9/coin-insights", arrange: func(underTest insightRoutesUnderTest) {
+			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9, Step: string(vo.PipelineRunStepFiltering)}, nil)
 			underTest.coinInsightRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinInsight{}, nil)
-		}, wantStatus: http.StatusOK},
+		}, wantStatus: http.StatusOK, wantBody: `[]`},
 	}
 
 	for _, testCase := range testCases {
@@ -141,6 +142,9 @@ func TestInsightsOfRunRoute(t *testing.T) {
 			assert.Equal(t, testCase.wantStatus, recorder.Code)
 			if testCase.wantError != "" {
 				assert.Equal(t, testCase.wantError, errorMessageOf(t, recorder))
+			}
+			if testCase.wantBody != "" {
+				assert.JSONEq(t, testCase.wantBody, recorder.Body.String())
 			}
 		})
 	}

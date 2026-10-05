@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"strings"
 )
@@ -26,7 +27,7 @@ func (okxPerpetualContractListingProxy *OkxPerpetualContractListingProxy) Exchan
 func (okxPerpetualContractListingProxy *OkxPerpetualContractListingProxy) FindUsdtPerpetualCoinSymbols(
 	executionContext context.Context,
 ) (map[string]bool, error) {
-	instruments, fetchError := getJson[okxInstrumentsWire](executionContext, okxPerpetualContractListingProxy.httpClient,
+	instruments, fetchError := utilities.GetJson[okxInstrumentsWire](executionContext, okxPerpetualContractListingProxy.httpClient,
 		okxPerpetualContractListingProxy.baseUrl+"/api/v5/public/instruments?instType=SWAP")
 	if fetchError != nil {
 		return nil, fetchError

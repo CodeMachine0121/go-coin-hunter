@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"slices"
 	"time"
@@ -36,7 +37,7 @@ func (binancePerpetualContractInformationSourceProxy *BinancePerpetualContractIn
 func (binancePerpetualContractInformationSourceProxy *BinancePerpetualContractInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	exchangeInformation, fetchError := getJson[binanceExchangeInformationWire](executionContext,
+	exchangeInformation, fetchError := utilities.GetJson[binanceExchangeInformationWire](executionContext,
 		binancePerpetualContractInformationSourceProxy.httpClient,
 		binancePerpetualContractInformationSourceProxy.baseUrl+"/fapi/v1/exchangeInfo")
 	if fetchError != nil {

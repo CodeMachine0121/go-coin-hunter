@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"strings"
 )
@@ -24,7 +25,7 @@ func (binancePerpetualContractListingProxy *BinancePerpetualContractListingProxy
 func (binancePerpetualContractListingProxy *BinancePerpetualContractListingProxy) FindUsdtPerpetualCoinSymbols(
 	executionContext context.Context,
 ) (map[string]bool, error) {
-	exchangeInformation, fetchError := getJson[binanceExchangeInformationWire](executionContext,
+	exchangeInformation, fetchError := utilities.GetJson[binanceExchangeInformationWire](executionContext,
 		binancePerpetualContractListingProxy.httpClient, binancePerpetualContractListingProxy.baseUrl+"/fapi/v1/exchangeInfo")
 	if fetchError != nil {
 		return nil, fetchError

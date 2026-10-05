@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,7 +32,7 @@ func (bybitPerpetualContractListingProxy *BybitPerpetualContractListingProxy) Fi
 	coinSymbols := map[string]bool{}
 	cursor := ""
 	for {
-		instruments, fetchError := getJson[bybitInstrumentsWire](executionContext, bybitPerpetualContractListingProxy.httpClient,
+		instruments, fetchError := utilities.GetJson[bybitInstrumentsWire](executionContext, bybitPerpetualContractListingProxy.httpClient,
 			bybitPerpetualContractListingProxy.baseUrl+"/v5/market/instruments-info?category=linear&limit=1000&cursor="+url.QueryEscape(cursor))
 		if fetchError != nil {
 			return nil, fetchError

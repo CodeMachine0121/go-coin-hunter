@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"net/url"
 	"strings"
@@ -50,7 +51,7 @@ func (goPlusTokenSecurityProxy *GoPlusTokenSecurityProxy) FindTokenSecurity(
 	goPlusTokenSecurityProxy.waitForTurn(executionContext)
 
 	if tokenAddress.ChainID == vo.ChainSolana {
-		response, fetchError := getJson[goPlusResponseWire[goPlusSolanaTokenSecurityWire]](executionContext, goPlusTokenSecurityProxy.httpClient,
+		response, fetchError := utilities.GetJson[goPlusResponseWire[goPlusSolanaTokenSecurityWire]](executionContext, goPlusTokenSecurityProxy.httpClient,
 			goPlusTokenSecurityProxy.baseUrl+"/api/v1/solana/token_security?contract_addresses="+url.QueryEscape(tokenAddress.Address))
 		if fetchError != nil {
 			return vo.TokenSecurityVo{}, false, fetchError
@@ -74,7 +75,7 @@ func (goPlusTokenSecurityProxy *GoPlusTokenSecurityProxy) FindTokenSecurity(
 	if !supported {
 		return vo.TokenSecurityVo{}, false, nil
 	}
-	response, fetchError := getJson[goPlusResponseWire[goPlusEvmTokenSecurityWire]](executionContext, goPlusTokenSecurityProxy.httpClient,
+	response, fetchError := utilities.GetJson[goPlusResponseWire[goPlusEvmTokenSecurityWire]](executionContext, goPlusTokenSecurityProxy.httpClient,
 		fmt.Sprintf("%s/api/v1/token_security/%s?contract_addresses=%s", goPlusTokenSecurityProxy.baseUrl, goPlusChainID, url.QueryEscape(tokenAddress.Address)))
 	if fetchError != nil {
 		return vo.TokenSecurityVo{}, false, fetchError

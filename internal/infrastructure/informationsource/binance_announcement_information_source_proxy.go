@@ -3,6 +3,7 @@ package informationsource
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"time"
 
@@ -29,7 +30,7 @@ func (binanceAnnouncementInformationSourceProxy *BinanceAnnouncementInformationS
 func (binanceAnnouncementInformationSourceProxy *BinanceAnnouncementInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	announcementList, fetchError := getJson[binanceAnnouncementListWire](executionContext,
+	announcementList, fetchError := utilities.GetJson[binanceAnnouncementListWire](executionContext,
 		binanceAnnouncementInformationSourceProxy.httpClient,
 		fmt.Sprintf("%s/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=%d&pageNo=1&pageSize=%d",
 			binanceAnnouncementInformationSourceProxy.baseUrl, binanceNewListingCatalogID, itemLimit))

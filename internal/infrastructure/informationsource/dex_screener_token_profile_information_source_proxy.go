@@ -3,6 +3,7 @@ package informationsource
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInfo
 func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	tokenProfiles, profilesError := getJson[[]dexScreenerTokenProfileWire](executionContext,
+	tokenProfiles, profilesError := utilities.GetJson[[]dexScreenerTokenProfileWire](executionContext,
 		dexScreenerTokenProfileInformationSourceProxy.httpClient,
 		dexScreenerTokenProfileInformationSourceProxy.baseUrl+"/token-profiles/latest/v1")
 	if profilesError != nil {
@@ -54,7 +55,7 @@ func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInfo
 		tokenAddresses := tokenAddressesByChain[chainID]
 		for batchStart := 0; batchStart < len(tokenAddresses); batchStart += dexScreenerAddressesPerLookup {
 			batch := tokenAddresses[batchStart:min(batchStart+dexScreenerAddressesPerLookup, len(tokenAddresses))]
-			pairs, pairsError := getJson[[]dexScreenerPairWire](executionContext,
+			pairs, pairsError := utilities.GetJson[[]dexScreenerPairWire](executionContext,
 				dexScreenerTokenProfileInformationSourceProxy.httpClient,
 				fmt.Sprintf("%s/tokens/v1/%s/%s", dexScreenerTokenProfileInformationSourceProxy.baseUrl, chainID, strings.Join(batch, ",")))
 			if pairsError != nil {

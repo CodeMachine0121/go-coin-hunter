@@ -3,6 +3,7 @@ package informationsource
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"time"
 
@@ -26,7 +27,7 @@ func (bybitAnnouncementInformationSourceProxy *BybitAnnouncementInformationSourc
 func (bybitAnnouncementInformationSourceProxy *BybitAnnouncementInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	announcementList, fetchError := getJson[bybitAnnouncementListWire](executionContext,
+	announcementList, fetchError := utilities.GetJson[bybitAnnouncementListWire](executionContext,
 		bybitAnnouncementInformationSourceProxy.httpClient,
 		fmt.Sprintf("%s/v5/announcements/index?locale=en-US&type=new_crypto&limit=%d",
 			bybitAnnouncementInformationSourceProxy.baseUrl, itemLimit))

@@ -137,7 +137,8 @@ flowchart TD
 - **How to add it:** 不改任何既有處理器；門檻放 `CoinFilterPolicyVo`。
 - **Patterns applied & why:** 策略模式（使用者指定，規則是最常變動的軸）；來源 list 注入（與探索一致）；取資料／判斷分離（判斷可純單元測試）。
 - **Do not hardcode:** 門檻（設定）、支援的鏈清單（`TokenAddressVo` 正規化表）、來源網址。
-- **Known debt / deferred:** 以代號對市值資料的誤認風險；解鎖資料集涵蓋率有限；不快取來源回應（每輪重抓）。
+- **Known debt / deferred:** 以代號對市值資料的誤認風險；解鎖資料集涵蓋率有限；不快取來源回應（每輪重抓）。`CoinProfileService.AssembleCoinProfiles` 內含「市值來源先到先得、安全檢查位址優先序、只為已上永續合約的幣查安全資料」三條取資料規則；刻意不拆成需依序呼叫的 Domain Model（會變成淺介面），等第二個需要同樣規則的呼叫者出現時再抽。
+- **Shared technical piece:** 所有 proxy 共用 `internal/utilities/GetJson`（單一 GET、要求 200、大小上限 32 MiB、解碼）；改請求標頭或上限只改這一處。
 
 ---
 

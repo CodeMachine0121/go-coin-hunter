@@ -2,6 +2,7 @@ package marketdata
 
 import (
 	"context"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -33,7 +34,7 @@ func (defiLlamaTokenUnlockScheduleProxy *DefiLlamaTokenUnlockScheduleProxy) Sour
 func (defiLlamaTokenUnlockScheduleProxy *DefiLlamaTokenUnlockScheduleProxy) FindTokenUnlockEvents(
 	executionContext context.Context, coinUnlockLookups []vo.CoinUnlockLookupVo,
 ) (map[string][]vo.TokenUnlockEventVo, error) {
-	protocolSlugs, listError := getJson[[]string](executionContext, defiLlamaTokenUnlockScheduleProxy.httpClient,
+	protocolSlugs, listError := utilities.GetJson[[]string](executionContext, defiLlamaTokenUnlockScheduleProxy.httpClient,
 		defiLlamaTokenUnlockScheduleProxy.baseUrl+"/emissionsProtocolsList")
 	if listError != nil {
 		return nil, listError
@@ -50,7 +51,7 @@ func (defiLlamaTokenUnlockScheduleProxy *DefiLlamaTokenUnlockScheduleProxy) Find
 			if protocolSlug == "" || !knownSlugs[protocolSlug] {
 				continue
 			}
-			emission, emissionError := getJson[defiLlamaEmissionWire](executionContext, defiLlamaTokenUnlockScheduleProxy.httpClient,
+			emission, emissionError := utilities.GetJson[defiLlamaEmissionWire](executionContext, defiLlamaTokenUnlockScheduleProxy.httpClient,
 				defiLlamaTokenUnlockScheduleProxy.baseUrl+"/emissions/"+url.PathEscape(protocolSlug))
 			if emissionError != nil {
 				return nil, emissionError

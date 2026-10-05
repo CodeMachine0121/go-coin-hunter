@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,7 +40,7 @@ func (coinGeckoCoinMarketDataProxy *CoinGeckoCoinMarketDataProxy) SourceName() s
 func (coinGeckoCoinMarketDataProxy *CoinGeckoCoinMarketDataProxy) FindCoinMarketData(
 	executionContext context.Context, coinIdentities []vo.CoinIdentityVo,
 ) (map[string]vo.CoinMarketDataVo, error) {
-	listedCoins, listError := getJson[[]coinGeckoListedCoinWire](executionContext, coinGeckoCoinMarketDataProxy.httpClient,
+	listedCoins, listError := utilities.GetJson[[]coinGeckoListedCoinWire](executionContext, coinGeckoCoinMarketDataProxy.httpClient,
 		coinGeckoCoinMarketDataProxy.baseUrl+"/api/v3/coins/list?include_platform=true")
 	if listError != nil {
 		return nil, listError
@@ -75,7 +76,7 @@ func (coinGeckoCoinMarketDataProxy *CoinGeckoCoinMarketDataProxy) FindCoinMarket
 	marketsByCoinID := map[string]coinGeckoMarketWire{}
 	for batchStart := 0; batchStart < len(coinIDsToPrice); batchStart += coinGeckoMarketsPageSize {
 		batch := coinIDsToPrice[batchStart:min(batchStart+coinGeckoMarketsPageSize, len(coinIDsToPrice))]
-		markets, marketsError := getJson[[]coinGeckoMarketWire](executionContext, coinGeckoCoinMarketDataProxy.httpClient,
+		markets, marketsError := utilities.GetJson[[]coinGeckoMarketWire](executionContext, coinGeckoCoinMarketDataProxy.httpClient,
 			fmt.Sprintf("%s/api/v3/coins/markets?vs_currency=usd&per_page=%d&ids=%s",
 				coinGeckoCoinMarketDataProxy.baseUrl, coinGeckoMarketsPageSize, url.QueryEscape(strings.Join(batch, ","))))
 		if marketsError != nil {

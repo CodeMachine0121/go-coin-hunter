@@ -3,6 +3,7 @@ package informationsource
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"strconv"
 	"time"
@@ -27,7 +28,7 @@ func (okxAnnouncementInformationSourceProxy *OkxAnnouncementInformationSourcePro
 func (okxAnnouncementInformationSourceProxy *OkxAnnouncementInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	announcementList, fetchError := getJson[okxAnnouncementListWire](executionContext,
+	announcementList, fetchError := utilities.GetJson[okxAnnouncementListWire](executionContext,
 		okxAnnouncementInformationSourceProxy.httpClient,
 		okxAnnouncementInformationSourceProxy.baseUrl+"/api/v5/support/announcements?annType=announcements-new-listings")
 	if fetchError != nil {

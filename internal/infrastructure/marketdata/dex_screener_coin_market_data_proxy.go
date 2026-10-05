@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"strings"
 
@@ -52,7 +53,7 @@ func (dexScreenerCoinMarketDataProxy *DexScreenerCoinMarketDataProxy) FindCoinMa
 		addresses := addressesByChain[chainID]
 		for batchStart := 0; batchStart < len(addresses); batchStart += dexScreenerAddressesPerLookup {
 			batch := addresses[batchStart:min(batchStart+dexScreenerAddressesPerLookup, len(addresses))]
-			pairs, pairsError := getJson[[]dexScreenerPairWire](executionContext, dexScreenerCoinMarketDataProxy.httpClient,
+			pairs, pairsError := utilities.GetJson[[]dexScreenerPairWire](executionContext, dexScreenerCoinMarketDataProxy.httpClient,
 				fmt.Sprintf("%s/tokens/v1/%s/%s", dexScreenerCoinMarketDataProxy.baseUrl, chainID, strings.Join(batch, ",")))
 			if pairsError != nil {
 				return nil, pairsError

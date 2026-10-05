@@ -1,4 +1,4 @@
-package insight
+package analysis
 
 import (
 	"time"
@@ -34,6 +34,30 @@ type marketStructureWire struct {
 	OpenInterestChangeRatio24h *string `json:"openInterestChangeRatio24h"`
 }
 
+// newMarketStructureWire writes each figure as exact decimal text, null where unknown; no market at all is null.
+func newMarketStructureWire(marketStructure *vo.PerpetualMarketStructureVo) *marketStructureWire {
+	if marketStructure == nil {
+		return nil
+	}
+	decimalText := func(value *decimal.Decimal) *string {
+		if value == nil {
+			return nil
+		}
+		text := value.String()
+		return &text
+	}
+
+	return &marketStructureWire{
+		Exchange:                   marketStructure.ExchangeName,
+		LastPrice:                  decimalText(marketStructure.LastPrice),
+		PriceChangeRatio24h:        decimalText(marketStructure.PriceChangeRatio24h),
+		QuoteVolumeUsd24h:          decimalText(marketStructure.QuoteVolumeUsd24h),
+		FundingRate:                decimalText(marketStructure.FundingRate),
+		OpenInterestUsd:            decimalText(marketStructure.OpenInterestUsd),
+		OpenInterestChangeRatio24h: decimalText(marketStructure.OpenInterestChangeRatio24h),
+	}
+}
+
 type filterVerdictWire struct {
 	Rule    string `json:"rule"`
 	Outcome string `json:"outcome"`
@@ -57,24 +81,7 @@ func newCoinInsightMaterialWire(material vo.CoinInsightMaterialVo) coinInsightMa
 	for _, verdict := range material.FilterVerdicts {
 		wire.FilterVerdicts = append(wire.FilterVerdicts, filterVerdictWire{Rule: verdict.FilterName, Outcome: string(verdict.Outcome), Reason: verdict.Reason})
 	}
-	if marketStructure := material.MarketStructure; marketStructure != nil {
-		decimalText := func(value *decimal.Decimal) *string {
-			if value == nil {
-				return nil
-			}
-			text := value.String()
-			return &text
-		}
-		wire.MarketStructure = &marketStructureWire{
-			Exchange:                   marketStructure.ExchangeName,
-			LastPrice:                  decimalText(marketStructure.LastPrice),
-			PriceChangeRatio24h:        decimalText(marketStructure.PriceChangeRatio24h),
-			QuoteVolumeUsd24h:          decimalText(marketStructure.QuoteVolumeUsd24h),
-			FundingRate:                decimalText(marketStructure.FundingRate),
-			OpenInterestUsd:            decimalText(marketStructure.OpenInterestUsd),
-			OpenInterestChangeRatio24h: decimalText(marketStructure.OpenInterestChangeRatio24h),
-		}
-	}
+	wire.MarketStructure = newMarketStructureWire(material.MarketStructure)
 
 	return wire
 }

@@ -19,6 +19,10 @@
     {
       "key": "insightRunId",
       "value": "1"
+    },
+    {
+      "key": "verdictRunId",
+      "value": "1"
     }
   ],
   "item": [
@@ -139,6 +143,44 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/pipeline-runs/{{insightRunId}}/coin-insights"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verdict",
+      "item": [
+        {
+          "name": "Synthesize hunt verdicts (manual)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/hunt-verdicts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const run = pm.response.json();",
+                  "if (run.id) { pm.collectionVariables.set('verdictRunId', run.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hunt board",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/hunt-board"
+          }
+        },
+        {
+          "name": "Coin verdicts of a run",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/pipeline-runs/{{verdictRunId}}/coin-verdicts"
           }
         }
       ]

@@ -10,13 +10,14 @@ import (
 	domaininterface "github.com/CodeMachine0121/go-coin-hunter/internal/domain/interface"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/service"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/analysis"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/clock"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/informationsource"
-	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/insight"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/news"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/persistence"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -96,7 +97,9 @@ func coinInsightPolicyFor(applicationConfig config.ApplicationConfig) vo.CoinIns
 }
 
 // coinInsightServiceFor wires the analyst and its material sources; market structure exchanges are listed in priority order.
-func coinInsightServiceFor(database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy) *service.CoinInsightService {
+func coinInsightServiceFor(
+	database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy, claudeAnalysisProxy *analysis.ClaudeAnalysisProxy,
+) *service.CoinInsightService {
 	httpClient := &http.Client{}
 	coinInsightPolicy := coinInsightPolicyFor(applicationConfig)
 
@@ -108,15 +111,35 @@ func coinInsightServiceFor(database *gorm.DB, applicationConfig config.Applicati
 		service.NewCoinInsightMaterialService(
 			persistence.NewCoinIntelligenceRepository(database),
 			news.NewGoogleNewsCoinNewsProxy(httpClient, applicationConfig.Insight.GoogleNewsBaseUrl),
-			perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
+			service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
+				applicationConfig.Insight.MaterialSourceTimeout),
 			coinInsightPolicy,
 		),
-		insight.NewClaudeCoinInsightAnalystProxy(
-			applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
-			applicationConfig.Insight.Model, applicationConfig.Insight.Effort, applicationConfig.Insight.AnalysisTimeout),
+		claudeAnalysisProxy,
 		clockProxy,
 		coinInsightPolicy,
 	)
+}
+
+// claudeModelSettingsFor gives each Claude capability its own model, effort and deadline.
+func claudeModelSettingsFor(applicationConfig config.ApplicationConfig) (analysis.ClaudeModelSettings, analysis.ClaudeModelSettings) {
+	return analysis.ClaudeModelSettings{Model: applicationConfig.Insight.Model, Effort: applicationConfig.Insight.Effort, RequestTimeout: applicationConfig.Insight.AnalysisTimeout},
+		analysis.ClaudeModelSettings{Model: applicationConfig.Verdict.Model, Effort: applicationConfig.Verdict.Effort, RequestTimeout: applicationConfig.Verdict.SynthesisTimeout}
+}
+
+// huntVerdictPolicyFor holds the safe ranges every verdict is clamped into: leverage 1-5, position up to 10%,
+// stop loss 1-50% and take profit 1-200% of the latest price, at most 90% for a short.
+func huntVerdictPolicyFor() vo.HuntVerdictPolicyVo {
+	return vo.HuntVerdictPolicyVo{
+		MinimumLeverage:               1,
+		MaximumLeverage:               5,
+		MaximumPositionSizePercent:    decimal.NewFromInt(10),
+		MinimumStopLossPercent:        decimal.NewFromInt(1),
+		MaximumStopLossPercent:        decimal.NewFromInt(50),
+		MinimumTakeProfitPercent:      decimal.NewFromInt(1),
+		MaximumTakeProfitPercent:      decimal.NewFromInt(200),
+		MaximumShortTakeProfitPercent: decimal.NewFromInt(90),
+	}
 }
 
 // applications are built once by the composition root and shared by routes and background jobs.
@@ -124,12 +147,17 @@ type applications struct {
 	coinDiscovery *application.CoinDiscoveryApplication
 	coinFiltering *application.CoinFilteringApplication
 	coinInsight   *application.CoinInsightApplication
+	huntVerdict   *application.HuntVerdictApplication
 	pipelineRun   *application.PipelineRunApplication
 }
 
 func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConfig) applications {
 	clockProxy := clock.NewSystemClockProxy()
 	pipelineRunRepository := persistence.NewPipelineRunRepository(database)
+	// One way out to Claude for both the insight analyst and the chief investment officer.
+	insightModelSettings, verdictModelSettings := claudeModelSettingsFor(applicationConfig)
+	claudeAnalysisProxy := analysis.NewClaudeAnalysisProxy(applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
+		insightModelSettings, verdictModelSettings)
 	coinCandidateRepository := persistence.NewCoinCandidateRepository(database)
 
 	return applications{
@@ -155,7 +183,18 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 			filterHandlersFor(applicationConfig.Filtering),
 			clockProxy,
 		)),
-		coinInsight: application.NewCoinInsightApplication(coinInsightServiceFor(database, applicationConfig, clockProxy)),
+		coinInsight: application.NewCoinInsightApplication(coinInsightServiceFor(database, applicationConfig, clockProxy, claudeAnalysisProxy)),
+		huntVerdict: application.NewHuntVerdictApplication(service.NewHuntVerdictService(
+			pipelineRunRepository,
+			persistence.NewCoinInsightRepository(database),
+			persistence.NewCoinVerdictRepository(database),
+			persistence.NewHuntBoardRepository(database),
+			service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
+				applicationConfig.Verdict.MarketSourceTimeout),
+			claudeAnalysisProxy,
+			clockProxy,
+			huntVerdictPolicyFor(),
+		)),
 		pipelineRun: application.NewPipelineRunApplication(service.NewPipelineRunService(pipelineRunRepository, clockProxy)),
 	}
 }
@@ -179,6 +218,11 @@ func registerRoutes(engine *gin.Engine, builtApplications applications) {
 	engine.POST("/coin-insights", coinInsightController.AnalyzeCoinCandidates)
 	engine.GET("/coin-insights/latest", coinInsightController.GetLatestCoinInsights)
 	engine.GET("/pipeline-runs/:pipelineRunId/coin-insights", coinInsightController.GetCoinInsightsOfPipelineRun)
+
+	huntVerdictController := controller.NewHuntVerdictController(builtApplications.huntVerdict)
+	engine.POST("/hunt-verdicts", huntVerdictController.SynthesizeHuntVerdicts)
+	engine.GET("/hunt-board", huntVerdictController.GetHuntBoard)
+	engine.GET("/pipeline-runs/:pipelineRunId/coin-verdicts", huntVerdictController.GetCoinVerdictsOfPipelineRun)
 
 	pipelineRunController := controller.NewPipelineRunController(builtApplications.pipelineRun)
 	engine.GET("/pipeline-runs", pipelineRunController.GetPipelineRuns)

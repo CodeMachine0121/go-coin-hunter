@@ -25,6 +25,8 @@ func (schemaMigrator *SchemaMigrator) Migrate() error {
 		&entities.CoinCandidate{},
 		&entities.CoinFilterResult{},
 		&entities.CoinInsight{},
+		&entities.CoinVerdict{},
+		&entities.HuntBoardEntry{},
 	); migrateError != nil {
 		return fmt.Errorf("auto migrate schema: %w", migrateError)
 	}

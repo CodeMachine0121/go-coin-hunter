@@ -20,20 +20,20 @@ const (
 type CoinInsightMaterialService struct {
 	coinIntelligenceRepository      domaininterface.ICoinIntelligenceRepository
 	coinNewsProxy                   domaininterface.ICoinNewsProxy
-	perpetualMarketStructureProxies []domaininterface.IPerpetualMarketStructureProxy
+	perpetualMarketStructureService *PerpetualMarketStructureService
 	coinInsightPolicy               vo.CoinInsightPolicyVo
 }
 
 func NewCoinInsightMaterialService(
 	coinIntelligenceRepository domaininterface.ICoinIntelligenceRepository,
 	coinNewsProxy domaininterface.ICoinNewsProxy,
-	perpetualMarketStructureProxies []domaininterface.IPerpetualMarketStructureProxy,
+	perpetualMarketStructureService *PerpetualMarketStructureService,
 	coinInsightPolicy vo.CoinInsightPolicyVo,
 ) *CoinInsightMaterialService {
 	return &CoinInsightMaterialService{
 		coinIntelligenceRepository:      coinIntelligenceRepository,
 		coinNewsProxy:                   coinNewsProxy,
-		perpetualMarketStructureProxies: perpetualMarketStructureProxies,
+		perpetualMarketStructureService: perpetualMarketStructureService,
 		coinInsightPolicy:               coinInsightPolicy,
 	}
 }
@@ -84,16 +84,7 @@ func (coinInsightMaterialService *CoinInsightMaterialService) GatherCoinInsightM
 			material.DataGaps = append(material.DataGaps, newsUnavailableDataGap)
 		}
 
-		// The first exchange in priority order that lists the coin speaks for it; a failing exchange is passed over.
-		for _, perpetualMarketStructureProxy := range coinInsightMaterialService.perpetualMarketStructureProxies {
-			marketContext, cancelMarket := context.WithTimeout(executionContext, policy.SourceRequestTimeout)
-			marketStructure, found, marketError := perpetualMarketStructureProxy.FindMarketStructure(marketContext, coinFilterResult.CoinSymbol)
-			cancelMarket()
-			if marketError == nil && found {
-				material.MarketStructure = &marketStructure
-				break
-			}
-		}
+		material.MarketStructure = coinInsightMaterialService.perpetualMarketStructureService.FindMarketStructure(executionContext, coinFilterResult.CoinSymbol)
 		if material.MarketStructure == nil {
 			material.DataGaps = append(material.DataGaps, marketStructureUnavailableDataGap)
 		}

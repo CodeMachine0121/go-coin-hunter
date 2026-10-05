@@ -18,6 +18,15 @@ type ApplicationConfig struct {
 	Discovery             DiscoveryConfig
 	Filtering             FilteringConfig
 	Insight               InsightConfig
+	Verdict               VerdictConfig
+}
+
+// VerdictConfig holds the chief investment officer's model settings; the API key is shared with the insight step.
+type VerdictConfig struct {
+	Model               string
+	Effort              string
+	SynthesisTimeout    time.Duration
+	MarketSourceTimeout time.Duration
 }
 
 // InsightConfig holds the AI analyst's settings and the free material sources; the API key is read here and nowhere else.
@@ -102,6 +111,8 @@ const (
 	tokenSecurityRequestInterval = 2 * time.Second
 	// insightAnalysisTimeout bounds one question to the analyst.
 	insightAnalysisTimeout = 120 * time.Second
+	// verdictSynthesisTimeout is longer: the strategist weighs every coin of the round in one answer.
+	verdictSynthesisTimeout = 180 * time.Second
 )
 
 // defaultExcludedCoinSymbols are majors and stablecoins: never new coins, however often they are mentioned.
@@ -145,6 +156,12 @@ func Load() ApplicationConfig {
 			MaximumNewsHeadlines:         10,
 			NewsLookback:                 72 * time.Hour,
 			MaterialSourceTimeout:        15 * time.Second,
+		},
+		Verdict: VerdictConfig{
+			Model:               cmp.Or(os.Getenv("VERDICT_MODEL"), "claude-opus-5-5"),
+			Effort:              cmp.Or(os.Getenv("VERDICT_EFFORT"), "high"),
+			SynthesisTimeout:    verdictSynthesisTimeout,
+			MarketSourceTimeout: 15 * time.Second,
 		},
 		Filtering: FilteringConfig{
 			MaximumTaxRate:                  parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_TAX_RATE"), "0.1"),

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/config"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/analysis"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
 	"github.com/stretchr/testify/assert"
 )
@@ -18,6 +19,29 @@ func TestPerpetualMarketStructureExchangesAreListedInPreferenceOrder(t *testing.
 	assert.IsType(t, &marketdata.BinancePerpetualMarketStructureProxy{}, proxies[0])
 	assert.IsType(t, &marketdata.BybitPerpetualMarketStructureProxy{}, proxies[1])
 	assert.IsType(t, &marketdata.OkxPerpetualMarketStructureProxy{}, proxies[2])
+}
+
+func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
+	huntVerdictPolicy := huntVerdictPolicyFor()
+
+	assert.Equal(t, 1, huntVerdictPolicy.MinimumLeverage)
+	assert.Equal(t, 5, huntVerdictPolicy.MaximumLeverage)
+	assert.Equal(t, "10", huntVerdictPolicy.MaximumPositionSizePercent.String())
+	assert.Equal(t, "1", huntVerdictPolicy.MinimumStopLossPercent.String())
+	assert.Equal(t, "50", huntVerdictPolicy.MaximumStopLossPercent.String())
+	assert.Equal(t, "1", huntVerdictPolicy.MinimumTakeProfitPercent.String())
+	assert.Equal(t, "200", huntVerdictPolicy.MaximumTakeProfitPercent.String())
+	assert.Equal(t, "90", huntVerdictPolicy.MaximumShortTakeProfitPercent.String())
+}
+
+func TestEachClaudeCapabilityKeepsItsOwnSettings(t *testing.T) {
+	insightSettings, verdictSettings := claudeModelSettingsFor(config.ApplicationConfig{
+		Insight: config.InsightConfig{Model: "insight-model", Effort: "low", AnalysisTimeout: 120 * time.Second},
+		Verdict: config.VerdictConfig{Model: "verdict-model", Effort: "high", SynthesisTimeout: 180 * time.Second},
+	})
+
+	assert.Equal(t, analysis.ClaudeModelSettings{Model: "insight-model", Effort: "low", RequestTimeout: 120 * time.Second}, insightSettings)
+	assert.Equal(t, analysis.ClaudeModelSettings{Model: "verdict-model", Effort: "high", RequestTimeout: 180 * time.Second}, verdictSettings)
 }
 
 func TestInsightShowsIntelligenceFromTheDiscoveryWindow(t *testing.T) {

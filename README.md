@@ -73,6 +73,8 @@ make mock              # 重新產生 mock
 | `INSIGHT_MAX_CONCURRENT_ANALYSES` | `3` | 同時進行的 AI 分析上限 |
 | `INSIGHT_MAX_COINS_PER_ROUND` | `20` | 每輪最多分析幾枚（取最早被提及的） |
 | `GOOGLE_NEWS_BASE_URL` | `https://news.google.com` | 新聞搜尋位址 |
+| `VERDICT_MODEL` | `claude-opus-5-5` | CIO 裁決使用的 Claude 模型（金鑰與洞察共用 `ANTHROPIC_API_KEY`） |
+| `VERDICT_EFFORT` | `high` | CIO 思考深度 |
 
 ## 資訊來源（全部免費、免金鑰）
 
@@ -105,6 +107,12 @@ make mock              # 重新產生 mock
 請求使用結構化輸出（JSON schema）、可快取的固定系統提示、伺服器端備援模型（政策拒答時改派）。方向與強度一律由 domain 正規化。
 **費用：** 素材全部免費；Claude 呼叫由你的 `ANTHROPIC_API_KEY` 付費，每輪最多 20 枚 × 2 次。
 
+## CIO 裁決與獵捕結果表
+
+整輪只問 CIO 一次（不可用重問一次），一次看完所有成功洞察與此刻的永續合約行情，為每枚幣給出操作（做多 / 做空 / 觀望 / 避開）、信心、槓桿、部位、停損與停利距離、理由與矛盾取捨。
+數字一律由 domain 決定：槓桿 1–5、部位 ≤ 10%、停損 1–50%、停利 1–200%（以最新價格換算成價格、方向正確）；查不到最新價格的做多 / 做空改判觀望。
+**獵捕結果表**每輪成功裁決以一筆交易改寫：本輪有的幣覆蓋、沒有的移除；失敗的裁決不動它。系統不下單。
+
 ## API Routes
 
 - `GET /health`
@@ -116,6 +124,9 @@ make mock              # 重新產生 mock
 - `POST /coin-insights` — 手動觸發一輪 AI 洞察（對最新成功過濾保留的候選幣）；從未有成功過濾時回 409「尚無成功的過濾輪次」
 - `GET /coin-insights/latest` — 最新一輪成功洞察的全部洞察（方向、強度、催化劑、風險、證據、資料缺口）
 - `GET /pipeline-runs/:pipelineRunId/coin-insights` — 某一輪洞察的全部結果（含分析失敗的幣與原因）
+- `POST /hunt-verdicts` — 手動觸發一輪 CIO 裁決並改寫獵捕結果表；從未有成功洞察時回 409「尚無成功的洞察輪次」
+- `GET /hunt-board` — **獵捕結果表**（依信心由高到低）：`id`、`coinSymbol`、`calculatedAt`＋操作、信心、槓桿、部位、停損停利價、理由、矛盾取捨
+- `GET /pipeline-runs/:pipelineRunId/coin-verdicts` — 某一輪裁決的全部裁決
 - `GET /pipeline-runs` — 管線輪次歷史，新到舊，含各來源結果
 - `GET /pipeline-runs/:pipelineRunId/coin-intelligences` — 某一輪首次保存的情報（非正整數 400、查無輪次 404）
 

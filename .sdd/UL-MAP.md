@@ -15,7 +15,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 獵捕管線 | *(尚未實作)* | 獵捕管線 | 探索 → 過濾 → 洞察 → 裁決 的完整一輪 | Confirmed |
 | 管線輪次 | `PipelineRun` | 輪次 | 管線**某一個步驟**的一次執行紀錄。狀態：執行中 → 成功 / 失敗 / 無資料；記錄觸發來源與失敗原因 | Confirmed |
-| 管線步驟 | `PipelineRunStepVo` | 步驟 | 管線輪次屬於哪一步：**探索**、**過濾**、**洞察**；後續切片補上裁決 | Confirmed |
+| 管線步驟 | `PipelineRunStepVo` | 步驟 | 管線輪次屬於哪一步：**探索**、**過濾**、**洞察**、**裁決** | Confirmed |
 | 觸發來源 | `PipelineRunTriggerSourceVo` | 觸發 | 輪次由**排程**還是**手動**發動 | Confirmed |
 | 輪次狀態 | `PipelineRunStatusVo` | 狀態 | **執行中**、**成功**、**失敗**、**無資料**。「無資料」指乾淨跑完但沒有產出任何候選幣 | Confirmed |
 | 資訊來源 | `IInformationSourceProxy` | 來源 | 一個免費的外部情報出處（幣安公告、幣安永續合約、Bybit 公告、OKX 公告、CoinGecko 熱門、DEX Screener 新幣看板）。可增減；彼此獨立，一個失敗不影響其他 | Confirmed |
@@ -40,6 +40,15 @@
 | 永續合約市場結構 | `PerpetualMarketStructureVo` | 市場結構 | 最新價格、24 小時漲跌幅、24 小時成交額、資金費率、持倉量與其 24 小時變化；依幣安 → Bybit → OKX 取第一家有合約的 | Confirmed |
 | 資料缺口 | `CoinInsight.DataGaps` | 缺口 | 分析一枚幣時缺少的素材（查不到新聞、查不到市場結構，或 AI 自行回報的缺口）；不擋分析 | Confirmed |
 | 洞察素材 | `CoinInsightMaterialVo` | — | 交給 AI 的一枚幣的全部輸入：情報標題、新聞標題、市場結構、過濾結果 | Confirmed |
+| 裁決 | *(尚未實作)* | 裁決 | CIO 對一枚幣的操作建議：操作、信心、建議槓桿、部位大小、停損與停利（距離與價格）、理由、矛盾取捨說明 | Confirmed |
+| 操作 | *(尚未實作)* | 操作 | **做多** long、**做空** short、**觀望** watch、**避開** avoid；其他值一律觀望 | Confirmed |
+| 信心 | *(尚未實作)* | 信心 | 0–100；超出夾回 | Confirmed |
+| 建議槓桿 | *(尚未實作)* | 槓桿 | 1–5 倍（做多 / 做空）；觀望 / 避開為 0 | Confirmed |
+| 部位大小 | *(尚未實作)* | 部位 | 佔總資金 0%–10%；觀望 / 避開為 0 | Confirmed |
+| 停損距離 / 停利距離 | *(尚未實作)* | 停損 / 停利 | 以最新價格百分比表示：停損 1%–50%、停利 1%–200%（做空停利上限 90%）；系統依方向換算成停損價 / 停利價 | Confirmed |
+| 參考價格 | `CoinVerdict.ReferencePrice` | 參考價 | 做多 / 做空裁決換算停損停利所用的最新價格 | Confirmed |
+| 矛盾取捨說明 | *(尚未實作)* | 取捨 | 洞察之間或洞察與市場結構矛盾時，CIO 採信哪一邊與理由 | Confirmed |
+| 獵捕結果表 | *(尚未實作)* | 獵捕結果 | 每枚幣一列（編號、幣種代號、計算時間＋裁決內容）；每輪成功裁決改寫：本輪有的覆蓋、沒有的移除，全有或全無 | Confirmed |
 | 探索時間窗 | `DiscoveryPolicyVo.Window` | 時間窗 | 只有發布時間落在「本輪開始往前 N 小時」內（含邊界）的情報才進入本輪候選幣。預設 72 小時 | Confirmed |
 | 候選幣 | `CoinCandidate` | 候選幣 | 一輪探索中，時間窗內被提到、且不屬排除幣種或傳統金融商品的一枚幣。每輪每個代號只有一個，記下提到它的來源數、情報數、最早被提到的時間 | Confirmed |
 
@@ -50,4 +59,5 @@
 | 探索 | `CoinDiscoveryService.DiscoverCoins` | 向全部資訊來源收集情報、保存、彙出本輪候選幣 | Confirmed |
 | 過濾 | `CoinFilteringService.FilterCoinCandidates` | 對最新成功探索的全部候選幣逐條套用過濾規則，保存過濾結果 | Confirmed |
 | 洞察分析 | `CoinInsightService.AnalyzeCoinCandidates` | 對最新成功過濾保留的候選幣逐枚請 AI 產生洞察 | Confirmed |
+| 獵捕裁決 | *(尚未實作)* | 對最新成功洞察整輪問 CIO 一次，產出裁決並改寫獵捕結果表 | Confirmed |
 | 中斷收尾 | `PipelineRunService.FailInterruptedPipelineRuns` | 服務啟動時，把殘留「執行中」的輪次改為「失敗（被重啟中斷）」 | Confirmed |

@@ -59,6 +59,20 @@ func TestLoadReadsFilteringThresholds(t *testing.T) {
 	assert.Equal(t, 2*time.Second, filteringConfig.TokenSecurityRequestInterval)
 }
 
+func TestLoadVerdictSettings(t *testing.T) {
+	t.Setenv("VERDICT_MODEL", "")
+	t.Setenv("VERDICT_EFFORT", "")
+
+	assert.Equal(t, config.VerdictConfig{Model: "claude-opus-5-5", Effort: "high", SynthesisTimeout: 180 * time.Second,
+		MarketSourceTimeout: 15 * time.Second}, config.Load().Verdict)
+
+	t.Setenv("VERDICT_MODEL", "claude-sonnet-5-5")
+	t.Setenv("VERDICT_EFFORT", "xhigh")
+
+	assert.Equal(t, "claude-sonnet-5-5", config.Load().Verdict.Model)
+	assert.Equal(t, "xhigh", config.Load().Verdict.Effort)
+}
+
 func TestLoadInsightDefaults(t *testing.T) {
 	for _, name := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "INSIGHT_MODEL", "INSIGHT_EFFORT",
 		"INSIGHT_MAX_CONCURRENT_ANALYSES", "INSIGHT_MAX_COINS_PER_ROUND", "GOOGLE_NEWS_BASE_URL"} {

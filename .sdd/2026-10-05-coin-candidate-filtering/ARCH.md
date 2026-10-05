@@ -79,8 +79,8 @@ type ICoinCandidateFilterHandler interface {
 | Interface | Implementation | 來源 | 重點 |
 | :--- | :--- | :--- | :--- |
 | `ICoinMarketDataProxy`（list，依優先序） | `CoinGeckoCoinMarketDataProxy` | `/api/v3/coins/list?include_platform=true` + `/api/v3/coins/markets?vs_currency=usd&ids=…`（每批 ≤ 250） | 有宣告位址者以平台位址對到幣；否則同代號取市值最大者；回傳含平台位址 |
-| | `DexScreenerCoinMarketDataProxy` | `/tokens/v1/{chain}/{addresses}`（每批 ≤ 30） | 只處理有宣告位址者；取流動性最大的交易對之 `fdv`、`volume.h24`；無供給量 |
-| `ITokenSecurityProxy` | `GoPlusTokenSecurityProxy` | `/api/v1/token_security/{chainId}?contract_addresses=…`、`/api/v1/solana/token_security?contract_addresses=…` | 只支援六條主流鏈；稅率字串 → 比率；Solana 的 mintable/freezable、EVM 的 is_mintable、transfer_pausable、is_blacklisted |
+| | `DexScreenerCoinMarketDataProxy` | `/tokens/v1/{chain}/{addresses}`（每批 ≤ 30） | 只處理有宣告位址者；估值取流動性最大的交易對之 `fdv`，成交額為所有交易對 `volume.h24` 加總；無供給量 |
+| `ITokenSecurityProxy` | `GoPlusTokenSecurityProxy` | `/api/v1/token_security/{chainId}?contract_addresses=…`、`/api/v1/solana/token_security?contract_addresses=…`（免費額度每次一個位址，間隔 2 秒） | 只支援六條主流鏈；稅率字串 → 比率；Solana 的 mintable/freezable、EVM 的 is_mintable、transfer_pausable、is_blacklisted |
 | `IPerpetualContractListingProxy`（list） | `BinancePerpetualContractListingProxy` · `BybitPerpetualContractListingProxy` · `OkxPerpetualContractListingProxy` | 幣安 `exchangeInfo`、Bybit `instruments-info?category=linear`、OKX `public/instruments?instType=SWAP` | 只取 USDT 計價、可交易、加密原生的永續合約之基礎幣代號 |
 | `ITokenUnlockScheduleProxy` | `DefiLlamaTokenUnlockScheduleProxy` | `defillama-datasets.llama.fi/emissionsProtocolsList` + `/emissions/{protocol}` | 以 CoinGecko id 或正規化名稱對到 protocol，再以 `gecko_id`/名稱確認；`metadata.events` 的時間與數量 |
 

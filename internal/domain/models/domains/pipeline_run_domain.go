@@ -64,6 +64,15 @@ func (pipelineRunDomain PipelineRunDomain) ConcludeInsight(succeededCoinCount in
 	return pipelineRun
 }
 
+// Succeed is a run whose single result is either produced in full or not at all.
+func (pipelineRunDomain PipelineRunDomain) Succeed(finishedAt time.Time) entities.PipelineRun {
+	pipelineRun := pipelineRunDomain.pipelineRun
+	pipelineRun.Status = string(vo.PipelineRunStatusSucceeded)
+	pipelineRun.FinishedAt = &finishedAt
+
+	return pipelineRun
+}
+
 func (pipelineRunDomain PipelineRunDomain) Fail(failureReason string, finishedAt time.Time) entities.PipelineRun {
 	pipelineRun := pipelineRunDomain.pipelineRun
 	pipelineRun.Status = string(vo.PipelineRunStatusFailed)

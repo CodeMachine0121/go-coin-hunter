@@ -7,4 +7,5 @@ const (
 	PipelineRunStepDiscovery PipelineRunStepVo = "discovery"
 	PipelineRunStepFiltering PipelineRunStepVo = "filtering"
 	PipelineRunStepInsight   PipelineRunStepVo = "insight"
+	PipelineRunStepVerdict   PipelineRunStepVo = "verdict"
 )

@@ -86,3 +86,23 @@ func (coinIntelligenceRepository *CoinIntelligenceRepository) FindDeclaredContra
 
 	return declaredContractAddresses, nil
 }
+
+func (coinIntelligenceRepository *CoinIntelligenceRepository) FindByCoinSymbolsSince(
+	executionContext context.Context, coinSymbols []string, publishedSince time.Time,
+) ([]entities.CoinIntelligence, error) {
+	// GORM's IN clause takes the loose element type.
+	coinSymbolValues := make([]any, 0, len(coinSymbols))
+	for _, coinSymbol := range coinSymbols {
+		coinSymbolValues = append(coinSymbolValues, coinSymbol)
+	}
+	coinIntelligences := []entities.CoinIntelligence{}
+	if findError := coinIntelligenceRepository.database.WithContext(executionContext).
+		Where(clause.IN{Column: "coin_symbol", Values: coinSymbolValues}).
+		Where(clause.Gte{Column: "published_at", Value: publishedSince.UTC()}).
+		Order("published_at DESC").Order("id").
+		Find(&coinIntelligences).Error; findError != nil {
+		return nil, fmt.Errorf("find coin intelligences of coins: %w", findError)
+	}
+
+	return coinIntelligences, nil
+}

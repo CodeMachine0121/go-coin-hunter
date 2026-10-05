@@ -52,6 +52,18 @@ func (pipelineRunDomain PipelineRunDomain) ConcludeFiltering(keptCoinCount int, 
 	return pipelineRun
 }
 
+// ConcludeInsight: analyzing any candidate is success; analyzing none is failure.
+func (pipelineRunDomain PipelineRunDomain) ConcludeInsight(succeededCoinCount int, finishedAt time.Time) entities.PipelineRun {
+	if succeededCoinCount == 0 {
+		return pipelineRunDomain.Fail(AllCoinAnalysesFailedReason, finishedAt)
+	}
+	pipelineRun := pipelineRunDomain.pipelineRun
+	pipelineRun.Status = string(vo.PipelineRunStatusSucceeded)
+	pipelineRun.FinishedAt = &finishedAt
+
+	return pipelineRun
+}
+
 func (pipelineRunDomain PipelineRunDomain) Fail(failureReason string, finishedAt time.Time) entities.PipelineRun {
 	pipelineRun := pipelineRunDomain.pipelineRun
 	pipelineRun.Status = string(vo.PipelineRunStatusFailed)

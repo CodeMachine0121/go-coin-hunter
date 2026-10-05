@@ -43,6 +43,21 @@ func (m *MockICoinIntelligenceRepository) EXPECT() *MockICoinIntelligenceReposit
 	return m.recorder
 }
 
+// FindByCoinSymbolsSince mocks base method.
+func (m *MockICoinIntelligenceRepository) FindByCoinSymbolsSince(executionContext context.Context, coinSymbols []string, publishedSince time.Time) ([]entities.CoinIntelligence, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByCoinSymbolsSince", executionContext, coinSymbols, publishedSince)
+	ret0, _ := ret[0].([]entities.CoinIntelligence)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByCoinSymbolsSince indicates an expected call of FindByCoinSymbolsSince.
+func (mr *MockICoinIntelligenceRepositoryMockRecorder) FindByCoinSymbolsSince(executionContext, coinSymbols, publishedSince any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByCoinSymbolsSince", reflect.TypeOf((*MockICoinIntelligenceRepository)(nil).FindByCoinSymbolsSince), executionContext, coinSymbols, publishedSince)
+}
+
 // FindByPipelineRunID mocks base method.
 func (m *MockICoinIntelligenceRepository) FindByPipelineRunID(executionContext context.Context, pipelineRunID uint) ([]entities.CoinIntelligence, error) {
 	m.ctrl.T.Helper()

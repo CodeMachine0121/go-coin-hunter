@@ -40,7 +40,7 @@ func newMigratedDatabase(t *testing.T) *gorm.DB {
 	require.NoError(t, persistence.NewSchemaMigrator(database).Migrate())
 
 	clearedDatabase := database.Session(&gorm.Session{AllowGlobalUpdate: true})
-	for _, entity := range []any{&entities.CoinFilterResult{}, &entities.CoinCandidate{}, &entities.CoinIntelligence{}, &entities.InformationSourceOutcome{}, &entities.PipelineRun{}} {
+	for _, entity := range []any{&entities.CoinInsight{}, &entities.CoinFilterResult{}, &entities.CoinCandidate{}, &entities.CoinIntelligence{}, &entities.InformationSourceOutcome{}, &entities.PipelineRun{}} {
 		require.NoError(t, clearedDatabase.Delete(entity).Error)
 	}
 

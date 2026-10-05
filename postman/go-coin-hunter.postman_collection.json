@@ -11,6 +11,10 @@
     {
       "key": "pipelineRunId",
       "value": "1"
+    },
+    {
+      "key": "filteringRunId",
+      "value": "1"
     }
   ],
   "item": [
@@ -55,6 +59,44 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/pipeline-runs/{{pipelineRunId}}/coin-intelligences"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Filtering",
+      "item": [
+        {
+          "name": "Filter coin candidates (manual)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/coin-filterings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const run = pm.response.json();",
+                  "if (run.id) { pm.collectionVariables.set('filteringRunId', run.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Latest kept coin candidates",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/coin-filter-results/latest-kept"
+          }
+        },
+        {
+          "name": "Coin filter results of a run",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/pipeline-runs/{{filteringRunId}}/coin-filter-results"
           }
         }
       ]

@@ -30,6 +30,7 @@ domain/
 │   ├── dto/          domain 對 application 的唯一回傳形狀
 │   └── vo/           value object：不可變純資料、無行為
 ├── service/          Domain Service：application 的唯一呼叫入口，一檔一 service
+├── handler/          策略處理器：同一個介面的多個可替換判斷規則，一檔一 handler（見下方）
 └── interface/        repository / proxy 介面，一介面一檔（mocks 放子資料夾）
 ```
 
@@ -129,6 +130,14 @@ service 拿到 entity 後直接 `entity.ToDto()`，不再自己組裝。**這類
 - `Service` 後綴**僅**用於跨 model 的編排（取資料、轉 DTO、多物件 / 併發運算）；單一物件的計算放它自己的 Domain Model。
 - **同一個 Domain Service 內的公開 use-case method 互不呼叫。** 需要跨方法編排時一律由 Application 層負責。私有 helper 不在此限。
 - 併發編排（同時查多個來源）放 Domain Service，用該語言的標準併發原語。
+
+## 策略處理器（handler）
+
+同一件事有多條**可增減、彼此獨立**的判斷規則時（例如過濾規則），用策略模式：
+
+- 介面放 `domain/interface/`（`I{能力}Handler`），實作放 `domain/handler/`，**一條規則一個 struct、一個檔案**，`Handler` 後綴。
+- handler 是**純判斷**：只讀傳進來的資料（VO），不碰 repository / proxy / 時鐘；需要的資料由 Domain Service 事先取齊。
+- 門檻等參數由建構子注入；組裝根以 `[]I{能力}Handler` 注入給使用它的 Domain Service。新增規則 = 新 handler + list 多一行，不改既有 handler。
 
 ## 呼叫鏈
 

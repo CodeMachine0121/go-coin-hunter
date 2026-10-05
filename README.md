@@ -59,6 +59,13 @@ make mock              # 重新產生 mock
 | `DISCOVERY_WINDOW_HOURS` | `72` | 探索時間窗：只有這段時間內發布的情報才產生候選幣 |
 | `DISCOVERY_EXCLUDED_COIN_SYMBOLS` | `BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD,USDE` | 排除幣種（主流幣、穩定幣），逗號分隔 |
 | `BINANCE_WEB_BASE_URL` / `BINANCE_FUTURES_BASE_URL` / `BYBIT_BASE_URL` / `OKX_BASE_URL` / `COINGECKO_BASE_URL` / `DEXSCREENER_BASE_URL` | 各官方網址 | 資訊來源網址（測試或代理時覆寫） |
+| `FILTER_MAXIMUM_TAX_RATE` | `0.1` | 安全檢查：買賣稅上限（比率，含上限通過） |
+| `FILTER_MINIMUM_DAILY_VOLUME_USD` | `1000000` | 流動性門檻：24 小時成交額下限（美元，含） |
+| `FILTER_MINIMUM_FDV_USD` / `FILTER_MAXIMUM_FDV_USD` | `10000000` / `1000000000` | 完全稀釋估值區間（美元，含兩端） |
+| `FILTER_MINIMUM_CIRCULATING_RATIO` | `0.2` | 流通比下限（含） |
+| `FILTER_UNLOCK_LOOKAHEAD_DAYS` | `14` | 解鎖時程觀察天數 |
+| `FILTER_MAXIMUM_UNLOCK_RATIO` | `0.05` | 觀察期內累計解鎖量占流通量的上限（達到即淘汰） |
+| `GOPLUS_BASE_URL` / `DEFILLAMA_DATASETS_BASE_URL` | 各官方網址 | 過濾資料來源網址 |
 
 ## 資訊來源（全部免費、免金鑰）
 
@@ -73,11 +80,26 @@ make mock              # 重新產生 mock
 
 新增來源：實作 `IInformationSourceProxy`（`internal/domain/interface/i_information_source_proxy.go`），在 `cmd/server/dependencies.go` 的 `informationSourcesFor` 多加一行即可。
 
+## 過濾規則（策略模式）
+
+每條規則一個 `XxxFilterHandler`（`internal/domain/handler/`），實作 `ICoinCandidateFilterHandler`，只讀幣種檔案、不碰外部來源。
+新增規則：寫一個 handler，在 `cmd/server/dependencies.go` 的 `filterHandlersFor` 多一行。
+
+| 規則 | 資料來源（免費） |
+| :--- | :--- |
+| 安全檢查 | GoPlus（每次一個合約，每 2 秒一次；只查已上永續合約的幣） |
+| 流動性門檻、完全稀釋估值、流通比 | CoinGecko（優先）、DEX Screener（鏈上幣備援，無供給量） |
+| 解鎖時程 | DefiLlama 公開 emissions 資料集 |
+| 是否已上永續合約 | 幣安、Bybit、OKX 永續合約清單（只算加密原生 USDT 永續） |
+
 ## API Routes
 
 - `GET /health`
 - `POST /coin-discoveries` — 手動觸發一輪探索，回傳該輪輪次（含各來源成敗）
 - `GET /coin-candidates/latest` — 最新一輪**成功**探索的候選幣（從未成功過為空陣列）
+- `POST /coin-filterings` — 手動觸發一輪過濾（對最新成功探索的候選幣）；從未有成功探索時回 409「尚無成功的探索輪次」
+- `GET /coin-filter-results/latest-kept` — 最新一輪成功過濾後**保留**的候選幣，附六條規則的結果與理由
+- `GET /pipeline-runs/:pipelineRunId/coin-filter-results` — 某一輪過濾的全部結果（含淘汰的幣；非正整數 400、查無輪次 404）
 - `GET /pipeline-runs` — 管線輪次歷史，新到舊，含各來源結果
 - `GET /pipeline-runs/:pipelineRunId/coin-intelligences` — 某一輪首次保存的情報（非正整數 400、查無輪次 404）
 

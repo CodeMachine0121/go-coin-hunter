@@ -25,7 +25,7 @@ type CoinProfileService struct {
 	tokenSecurityProxy              domaininterface.ITokenSecurityProxy
 	perpetualContractListingProxies []domaininterface.IPerpetualContractListingProxy
 	tokenUnlockScheduleProxy        domaininterface.ITokenUnlockScheduleProxy
-	sourceRequestTimeout            time.Duration
+	coinProfileTiming               vo.CoinProfileTimingVo
 }
 
 func NewCoinProfileService(
@@ -34,7 +34,7 @@ func NewCoinProfileService(
 	tokenSecurityProxy domaininterface.ITokenSecurityProxy,
 	perpetualContractListingProxies []domaininterface.IPerpetualContractListingProxy,
 	tokenUnlockScheduleProxy domaininterface.ITokenUnlockScheduleProxy,
-	sourceRequestTimeout time.Duration,
+	coinProfileTiming vo.CoinProfileTimingVo,
 ) *CoinProfileService {
 	return &CoinProfileService{
 		coinIntelligenceRepository:      coinIntelligenceRepository,
@@ -42,7 +42,7 @@ func NewCoinProfileService(
 		tokenSecurityProxy:              tokenSecurityProxy,
 		perpetualContractListingProxies: perpetualContractListingProxies,
 		tokenUnlockScheduleProxy:        tokenUnlockScheduleProxy,
-		sourceRequestTimeout:            sourceRequestTimeout,
+		coinProfileTiming:               coinProfileTiming,
 	}
 }
 
@@ -78,10 +78,15 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		return fmt.Errorf("%w：%s（%s）", domains.ErrCoinProfileSourceUnavailable, sourceName, reason)
 	}
 
+	// The whole gathering ends within the base budget; security lookups later extend it by their own allowance.
+	gatheringStartedAt := time.Now()
+	baseContext, cancelBase := context.WithTimeout(executionContext, coinProfileService.coinProfileTiming.RoundBaseBudget)
+	defer cancelBase()
+
 	// Market data: the first source in priority order that knows a coin speaks for it.
 	marketDataBySymbol := map[string]vo.CoinMarketDataVo{}
 	for _, coinMarketDataProxy := range coinProfileService.coinMarketDataProxies {
-		sourceContext, cancelSource := context.WithTimeout(executionContext, coinProfileService.sourceRequestTimeout)
+		sourceContext, cancelSource := context.WithTimeout(baseContext, coinProfileService.coinProfileTiming.SourceRequestTimeout)
 		foundMarketData, marketDataError := coinMarketDataProxy.FindCoinMarketData(sourceContext, coinIdentities)
 		cancelSource()
 		if marketDataError != nil {
@@ -100,7 +105,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 	waitGroup := sync.WaitGroup{}
 	for index, perpetualContractListingProxy := range coinProfileService.perpetualContractListingProxies {
 		waitGroup.Go(func() {
-			sourceContext, cancelSource := context.WithTimeout(executionContext, coinProfileService.sourceRequestTimeout)
+			sourceContext, cancelSource := context.WithTimeout(baseContext, coinProfileService.coinProfileTiming.SourceRequestTimeout)
 			defer cancelSource()
 			listedCoinSymbolsByExchange[index], listingErrors[index] = perpetualContractListingProxy.FindUsdtPerpetualCoinSymbols(sourceContext)
 		})
@@ -155,6 +160,16 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		coinProfiles = append(coinProfiles, coinProfile)
 	}
 
+	securityLookupCount := 0
+	for _, coinProfile := range coinProfiles {
+		if coinProfile.ContractAddress != nil && len(coinProfile.PerpetualContractExchanges) > 0 {
+			securityLookupCount++
+		}
+	}
+	extendedContext, cancelExtended := context.WithDeadline(executionContext, gatheringStartedAt.Add(
+		coinProfileService.coinProfileTiming.RoundBaseBudget+time.Duration(securityLookupCount)*coinProfileService.coinProfileTiming.SecurityLookupAllowance))
+	defer cancelExtended()
+
 	// Security: one contract per request on the free quota, so only for coins the trader could trade at all.
 	for index := range coinProfiles {
 		coinProfile := &coinProfiles[index]
@@ -165,7 +180,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 			coinProfile.TokenSecurityNotQueriedReason = securityNotQueriedWithoutPerpetualReason
 			continue
 		}
-		sourceContext, cancelSource := context.WithTimeout(executionContext, coinProfileService.sourceRequestTimeout)
+		sourceContext, cancelSource := context.WithTimeout(extendedContext, coinProfileService.coinProfileTiming.SourceRequestTimeout)
 		tokenSecurity, found, securityError := coinProfileService.tokenSecurityProxy.FindTokenSecurity(sourceContext, *coinProfile.ContractAddress)
 		cancelSource()
 		if securityError != nil {
@@ -177,7 +192,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 	}
 
 	if len(coinUnlockLookups) > 0 {
-		sourceContext, cancelSource := context.WithTimeout(executionContext, coinProfileService.sourceRequestTimeout)
+		sourceContext, cancelSource := context.WithTimeout(extendedContext, coinProfileService.coinProfileTiming.SourceRequestTimeout)
 		unlockEventsBySymbol, unlockError := coinProfileService.tokenUnlockScheduleProxy.FindTokenUnlockEvents(sourceContext, coinUnlockLookups)
 		cancelSource()
 		if unlockError != nil {

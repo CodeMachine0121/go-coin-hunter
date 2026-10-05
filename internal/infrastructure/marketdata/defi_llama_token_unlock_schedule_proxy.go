@@ -2,6 +2,7 @@ package marketdata
 
 import (
 	"context"
+	"errors"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"net/url"
@@ -51,11 +52,15 @@ func (defiLlamaTokenUnlockScheduleProxy *DefiLlamaTokenUnlockScheduleProxy) Find
 			if protocolSlug == "" || !knownSlugs[protocolSlug] {
 				continue
 			}
-			// One protocol's dataset failing leaves that coin uncovered; only the list failing means the source is down.
+			// A missing dataset leaves just that coin uncovered; any other failure, a deadline included, means the source is down.
 			emission, emissionError := utilities.GetJson[defiLlamaEmissionWire](executionContext, defiLlamaTokenUnlockScheduleProxy.httpClient,
 				defiLlamaTokenUnlockScheduleProxy.baseUrl+"/emissions/"+url.PathEscape(protocolSlug))
-			if emissionError != nil {
+			httpStatusError := utilities.HttpStatusError{}
+			if errors.As(emissionError, &httpStatusError) && httpStatusError.StatusCode == http.StatusNotFound {
 				continue
+			}
+			if emissionError != nil {
+				return nil, emissionError
 			}
 			sameCoin := (emission.GeckoID != "" && emission.GeckoID == coinUnlockLookup.CoinGeckoID) ||
 				(emission.GeckoID == "" && strings.EqualFold(emission.Name, coinUnlockLookup.Name))

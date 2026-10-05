@@ -42,7 +42,7 @@ func newFilteringRoutesUnderTest(t *testing.T) filteringRoutesUnderTest {
 	clockProxy.EXPECT().Now().Return(time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)).AnyTimes()
 	coinFilteringController := controller.NewCoinFilteringController(application.NewCoinFilteringApplication(service.NewCoinFilteringService(
 		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResultRepository,
-		service.NewCoinProfileService(underTest.coinIntelligenceRepository, nil, nil, nil, nil, time.Second), nil, clockProxy)))
+		service.NewCoinProfileService(underTest.coinIntelligenceRepository, nil, nil, nil, nil, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: time.Minute}), nil, clockProxy)))
 	underTest.engine.POST("/coin-filterings", coinFilteringController.FilterCoinCandidates)
 	underTest.engine.GET("/coin-filter-results/latest-kept", coinFilteringController.GetLatestKeptCoinCandidates)
 	underTest.engine.GET("/pipeline-runs/:pipelineRunId/coin-filter-results", coinFilteringController.GetCoinFilterResultsOfPipelineRun)

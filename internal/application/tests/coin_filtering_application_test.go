@@ -133,7 +133,7 @@ func newCoinFilteringUnderTest(t *testing.T, candidateSymbols ...string) *coinFi
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData},
 			underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, time.Second),
+			underTest.tokenUnlocks, profileTiming(time.Second)),
 		defaultFilterHandlers(), clockProxy))
 
 	return underTest
@@ -225,7 +225,7 @@ func TestFilterCoinCandidatesGathersProfilesFromTheRightSources(t *testing.T) {
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData},
 			underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, time.Second),
+			underTest.tokenUnlocks, profileTiming(time.Second)),
 		defaultFilterHandlers(), clockProxy))
 
 	baseOnly := healthyMarketData("aerodrome-finance", vo.TokenAddressVo{ChainID: vo.ChainBase, Address: "0xaero"})
@@ -359,7 +359,7 @@ func TestFilterCoinCandidatesSurfacesStorageFailures(t *testing.T) {
 			service.NewCoinProfileService(underTest.coinIntelligences,
 				[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 				[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-				underTest.tokenUnlocks, time.Second),
+				underTest.tokenUnlocks, profileTiming(time.Second)),
 			defaultFilterHandlers(), clockProxy))
 
 		_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
@@ -412,7 +412,7 @@ func TestFilterCoinCandidatesSurfacesStorageFailures(t *testing.T) {
 			clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
 			coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
 				pipelineRuns, candidates, results,
-				service.NewCoinProfileService(intelligences, nil, nil, nil, nil, time.Second), nil, clockProxy))
+				service.NewCoinProfileService(intelligences, nil, nil, nil, nil, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: time.Minute}), nil, clockProxy))
 
 			_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
 
@@ -523,7 +523,7 @@ func TestFilterCoinCandidatesReportsATimedOutSourceAsAConnectionTimeout(t *testi
 		service.NewCoinProfileService(underTest.coinIntelligences,
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, 50*time.Millisecond),
+			underTest.tokenUnlocks, profileTiming(50*time.Millisecond)),
 		defaultFilterHandlers(), clockProxy))
 
 	pipelineRun, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
@@ -547,7 +547,7 @@ func TestFilterCoinCandidatesChecksOnlyTheDeclaredContract(t *testing.T) {
 		service.NewCoinProfileService(coinIntelligences,
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, time.Second),
+			underTest.tokenUnlocks, profileTiming(time.Second)),
 		defaultFilterHandlers(), clockProxy))
 	bscContract := vo.TokenAddressVo{ChainID: vo.ChainBsc, Address: "0xbsc"}
 	ethereumContract := vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xeth"}
@@ -566,4 +566,46 @@ func TestFilterCoinCandidatesChecksOnlyTheDeclaredContract(t *testing.T) {
 	assert.Equal(t, "passed", verdictOf(underTest.savedResult(t, "MULTI"), "securityCheck").Outcome)
 	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "securityCheck", Outcome: "noData", Reason: "沒有主流鏈上的合約位址"},
 		verdictOf(underTest.savedResult(t, "SUN"), "securityCheck"))
+}
+
+// profileTiming gives each source the timeout and leaves the round budgets out of the way.
+func profileTiming(sourceRequestTimeout time.Duration) vo.CoinProfileTimingVo {
+	return vo.CoinProfileTimingVo{SourceRequestTimeout: sourceRequestTimeout, RoundBaseBudget: time.Minute, SecurityLookupAllowance: 2 * time.Second}
+}
+
+func TestFilterCoinCandidatesStaysInsideTheRoundBudget(t *testing.T) {
+	controller := gomock.NewController(t)
+	underTest := newCoinFilteringUnderTest(t, "ZORA", "GRASS")
+	zoraContract := vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xzora"}
+	grassContract := vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xgrass"}
+	underTest.answerMarketData(map[string]vo.CoinMarketDataVo{"ZORA": healthyMarketData("zora", zoraContract), "GRASS": healthyMarketData("grass", grassContract)}, nil)
+	underTest.answerListings(map[string]bool{"ZORA": true, "GRASS": true}, map[string]bool{}, map[string]bool{})
+	// Each lookup is quick on its own, yet together they outlast the base budget plus two allowances.
+	underTest.tokenSecurity.EXPECT().FindTokenSecurity(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(sourceContext context.Context, _ vo.TokenAddressVo) (vo.TokenSecurityVo, bool, error) {
+			select {
+			case <-time.After(150 * time.Millisecond):
+				return vo.TokenSecurityVo{}, true, nil
+			case <-sourceContext.Done():
+				return vo.TokenSecurityVo{}, false, sourceContext.Err()
+			}
+		}).AnyTimes()
+	underTest.answerUnlocks(map[string][]vo.TokenUnlockEventVo{})
+	clockProxy := mocks.NewMockIClockProxy(controller)
+	clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
+	coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
+		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResults,
+		service.NewCoinProfileService(underTest.coinIntelligences,
+			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
+			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
+			underTest.tokenUnlocks, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: 100 * time.Millisecond, SecurityLookupAllowance: 50 * time.Millisecond}),
+		defaultFilterHandlers(), clockProxy))
+	startedAt := time.Now()
+
+	pipelineRun, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
+
+	require.NoError(t, filterError)
+	assert.Less(t, time.Since(startedAt), 300*time.Millisecond)
+	assert.Equal(t, string(vo.PipelineRunStatusFailed), pipelineRun.Status)
+	assert.Equal(t, "資料來源無法取得：goPlusTokenSecurity（連線逾時）", pipelineRun.FailureReason)
 }

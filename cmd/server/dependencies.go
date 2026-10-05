@@ -63,7 +63,11 @@ func coinProfileServiceFor(database *gorm.DB, applicationConfig config.Applicati
 			marketdata.NewOkxPerpetualContractListingProxy(httpClient, applicationConfig.Discovery.OkxBaseUrl),
 		},
 		marketdata.NewDefiLlamaTokenUnlockScheduleProxy(httpClient, applicationConfig.Filtering.DefiLlamaDatasetsBaseUrl),
-		applicationConfig.Filtering.SourceRequestTimeout,
+		vo.CoinProfileTimingVo{
+			SourceRequestTimeout:    applicationConfig.Filtering.SourceRequestTimeout,
+			RoundBaseBudget:         applicationConfig.Filtering.RoundBaseBudget,
+			SecurityLookupAllowance: applicationConfig.Filtering.TokenSecurityRequestInterval,
+		},
 	)
 }
 

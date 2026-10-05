@@ -30,7 +30,7 @@ func GetJson[T any](executionContext context.Context, httpClient *http.Client, r
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return decoded, fmt.Errorf("request %s: unexpected status %d", request.URL.Host, response.StatusCode)
+		return decoded, fmt.Errorf("request %s: %w", request.URL.Host, HttpStatusError{StatusCode: response.StatusCode})
 	}
 	if decodeError := json.NewDecoder(io.LimitReader(response.Body, maximumResponseBytes)).Decode(&decoded); decodeError != nil {
 		return decoded, fmt.Errorf("decode %s response: %w", request.URL.Host, decodeError)

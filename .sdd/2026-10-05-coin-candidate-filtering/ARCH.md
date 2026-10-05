@@ -69,6 +69,7 @@ type ICoinCandidateFilterHandler interface {
 | `CoinIdentityVo` | VO | 查詢用身分：`CoinSymbol`、`DeclaredContractAddress *TokenAddressVo` |
 | `FilterVerdictVo` / `FilterOutcomeVo` | VO | `FilterName`、`Outcome`（`passed`/`rejected`/`noData`）、`Reason` |
 | `CoinFilterPolicyVo` | VO | 全部門檻 |
+| `CoinProfileTimingVo` | VO | 取資料的時間界線：每來源逾時、整輪基本預算（60 秒）、每次安全查詢的額度（2 秒）；整輪取資料一定在「基本預算 ＋ 額度 × 安全查詢數」內結束 |
 | `CoinFilterVerdictsDomain` | Domain Model | 一枚幣的全部規則結果：`IsKept()`（無任何淘汰）、`ToCoinFilterResult(pipelineRunID, symbol)` |
 | `UsdAmountDomain` / `TokenQuantityDomain` / `PercentageDomain` | Domain Model | 金額、數量、比率的中文描述（理由用） |
 | `CoinFilterResult` | Entity | `PipelineRunID`、`CoinSymbol`、`IsKept`、`Verdicts []CoinFilterVerdictRecord`（`serializer:json`，一個 entity 一個 repository）；(`PipelineRunID`,`CoinSymbol`) 唯一；`ToDto()` |
@@ -138,7 +139,7 @@ flowchart TD
 - **Patterns applied & why:** 策略模式（使用者指定，規則是最常變動的軸）；來源 list 注入（與探索一致）；取資料／判斷分離（判斷可純單元測試）。
 - **Do not hardcode:** 門檻（設定）、支援的鏈清單（`TokenAddressVo` 正規化表）、來源網址。
 - **Known debt / deferred:** 以代號對市值資料的誤認風險；解鎖資料集涵蓋率有限；不快取來源回應（每輪重抓）。`CoinProfileService.AssembleCoinProfiles` 內含「市值來源先到先得、安全檢查位址優先序、只為已上永續合約的幣查安全資料」三條取資料規則；刻意不拆成需依序呼叫的 Domain Model（會變成淺介面），等第二個需要同樣規則的呼叫者出現時再抽。
-- **Shared technical piece:** 所有 proxy 共用 `internal/utilities/GetJson`（單一 GET、要求 200、大小上限 32 MiB、解碼）；改請求標頭或上限只改這一處。
+- **Shared technical piece:** 所有 proxy 共用 `internal/utilities/GetJson`（單一 GET、要求 200、大小上限 32 MiB、解碼）；非 200 回 `utilities.HttpStatusError`，讓 proxy 分得出「這一項不存在（404）」與「來源壞了」。
 
 ---
 

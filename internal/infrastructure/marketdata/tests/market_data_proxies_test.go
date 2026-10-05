@@ -432,3 +432,43 @@ func (recorder roundTripRecorder) RoundTrip(request *http.Request) (*http.Respon
 	recorder(request)
 	return http.DefaultTransport.RoundTrip(request)
 }
+
+func TestDefiLlamaTreatsAnyFailureButAMissingDatasetAsTheSourceDown(t *testing.T) {
+	t.Run("a refused dataset", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/emissionsProtocolsList" {
+				_, _ = writer.Write([]byte(`["grass"]`))
+				return
+			}
+			writer.WriteHeader(http.StatusTooManyRequests)
+		}))
+		t.Cleanup(server.Close)
+
+		_, findError := marketdata.NewDefiLlamaTokenUnlockScheduleProxy(http.DefaultClient, server.URL).FindTokenUnlockEvents(context.Background(),
+			[]vo.CoinUnlockLookupVo{{CoinSymbol: "GRASS", CoinGeckoID: "grass"}})
+
+		assert.ErrorContains(t, findError, "unexpected status 429")
+	})
+
+	t.Run("a deadline passing between datasets", func(t *testing.T) {
+		stalled := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/emissionsProtocolsList" {
+				_, _ = writer.Write([]byte(`["grass"]`))
+				return
+			}
+			<-stalled
+		}))
+		t.Cleanup(func() {
+			close(stalled)
+			server.Close()
+		})
+		executionContext, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		_, findError := marketdata.NewDefiLlamaTokenUnlockScheduleProxy(http.DefaultClient, server.URL).FindTokenUnlockEvents(executionContext,
+			[]vo.CoinUnlockLookupVo{{CoinSymbol: "GRASS", CoinGeckoID: "grass"}})
+
+		assert.ErrorIs(t, findError, context.DeadlineExceeded)
+	})
+}

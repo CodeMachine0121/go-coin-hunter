@@ -55,6 +55,7 @@ func TestLoadReadsFilteringThresholds(t *testing.T) {
 	assert.Equal(t, 7*24*time.Hour, filteringConfig.UnlockLookahead)
 	assert.Equal(t, "0.05", filteringConfig.MaximumUnlockRatioOfCirculating.String())
 	assert.Equal(t, 20*time.Second, filteringConfig.SourceRequestTimeout)
+	assert.Equal(t, 60*time.Second, filteringConfig.RoundBaseBudget)
 	assert.Equal(t, 2*time.Second, filteringConfig.TokenSecurityRequestInterval)
 }
 

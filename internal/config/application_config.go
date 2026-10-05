@@ -64,6 +64,8 @@ type FilteringConfig struct {
 	UnlockLookahead                 time.Duration
 	MaximumUnlockRatioOfCirculating decimal.Decimal
 	SourceRequestTimeout            time.Duration
+	// RoundBaseBudget bounds gathering a round's data, before the allowance each security lookup adds.
+	RoundBaseBudget time.Duration
 	// TokenSecurityRequestInterval spaces token security lookups to stay inside the free request rate.
 	TokenSecurityRequestInterval time.Duration
 	GoPlusBaseUrl                string
@@ -76,6 +78,8 @@ const (
 	informationSourceRequestTimeout = 15 * time.Second
 	// filteringSourceRequestTimeout is longer than discovery's: the coin list and contract lists are large answers.
 	filteringSourceRequestTimeout = 20 * time.Second
+	// filteringRoundBaseBudget is the agreed round time before security lookups: 60 seconds.
+	filteringRoundBaseBudget = 60 * time.Second
 	// tokenSecurityRequestInterval keeps token security lookups near the free tier's thirty per minute.
 	tokenSecurityRequestInterval = 2 * time.Second
 )
@@ -117,6 +121,7 @@ func Load() ApplicationConfig {
 			UnlockLookahead:                 time.Duration(parsePositiveIntWithDefault(os.Getenv("FILTER_UNLOCK_LOOKAHEAD_DAYS"), 14)) * 24 * time.Hour,
 			MaximumUnlockRatioOfCirculating: parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_UNLOCK_RATIO"), "0.05"),
 			SourceRequestTimeout:            filteringSourceRequestTimeout,
+			RoundBaseBudget:                 filteringRoundBaseBudget,
 			TokenSecurityRequestInterval:    tokenSecurityRequestInterval,
 			GoPlusBaseUrl:                   cmp.Or(os.Getenv("GOPLUS_BASE_URL"), "https://api.gopluslabs.io"),
 			DefiLlamaDatasetsBaseUrl:        cmp.Or(os.Getenv("DEFILLAMA_DATASETS_BASE_URL"), "https://defillama-datasets.llama.fi"),

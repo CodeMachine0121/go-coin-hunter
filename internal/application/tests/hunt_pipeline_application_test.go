@@ -1,8 +1,11 @@
 package application_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -331,4 +334,39 @@ func TestRunHuntRoundRefusesASecondRoundWhileOneIsRunning(t *testing.T) {
 	world.informationSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).Return([]vo.InformationItemVo{}, nil)
 	_, laterError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceManual)
 	assert.NoError(t, laterError, "a round may run again once the previous one ended")
+}
+
+// capturedLog collects what the standard logger writes during a test.
+func capturedLog(t *testing.T) *bytes.Buffer {
+	logBuffer := &bytes.Buffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logBuffer)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
+	return logBuffer
+}
+
+func TestRunHuntRoundLeavesOneLogLinePerRound(t *testing.T) {
+	t.Run("a completed round", func(t *testing.T) {
+		world := newHuntPipelineWorld(t)
+		world.discoveryFinds("ZORA")
+		world.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(bullishAnswer(), nil)
+		world.strategist.EXPECT().SynthesizeVerdicts(gomock.Any(), gomock.Any()).Return([]vo.HuntVerdictAnswerVo{longAnswer("ZORA")}, nil)
+		world.huntBoard.EXPECT().Rewrite(gomock.Any(), gomock.Any()).Return(nil)
+		logBuffer := capturedLog(t)
+
+		_, _ = world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceManual)
+
+		assert.Contains(t, logBuffer.String(), "hunt round (manual) completed: pipeline runs [1 2 3 4]")
+		assert.Equal(t, 1, strings.Count(logBuffer.String(), "hunt round ("))
+	})
+
+	t.Run("a stopped round", func(t *testing.T) {
+		world := newHuntPipelineWorld(t)
+		world.discoveryFinds()
+		logBuffer := capturedLog(t)
+
+		_, _ = world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+
+		assert.Contains(t, logBuffer.String(), "hunt round (job) stopped at discovery (探索未成功：noData): pipeline runs [1]")
+	})
 }

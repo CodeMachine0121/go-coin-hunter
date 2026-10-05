@@ -62,15 +62,5 @@ func main() {
 	}()
 
 	<-shutdownSignalled.Done()
-	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), applicationConfig.ShutdownGracePeriod)
-	defer cancelShutdown()
-
-	backgroundJobManager.StopAll()
-	if shutdownError := server.Shutdown(shutdownContext); shutdownError != nil {
-		log.Printf("failed to shut down http server cleanly: %v", shutdownError)
-	}
-	if !backgroundJobManager.WaitAll(shutdownContext) {
-		log.Println("background jobs did not finish within the grace period; abandoning them")
-		abandonJobs()
-	}
+	shutDown(server, backgroundJobManager, applicationConfig.ShutdownGracePeriod, abandonJobs)
 }

@@ -1,7 +1,9 @@
 package job_test
 
 import (
+	"bytes"
 	"context"
+	"log"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -69,12 +71,17 @@ func TestHuntPipelineJobKeepsItsScheduleWhenARoundIsRefused(t *testing.T) {
 			return dto.HuntRoundDto{}, domains.ErrHuntRoundAlreadyRunning
 		}).MinTimes(2)
 	huntPipelineJob := job.NewHuntPipelineJob(huntPipeline, 10*time.Millisecond)
+	logBuffer := &bytes.Buffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logBuffer)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
 
 	huntPipelineJob.Start(context.Background())
 	waitUntil(t, func() bool { return rounds.Load() >= 2 })
 	huntPipelineJob.Stop()
 
 	<-huntPipelineJob.Finished()
+	assert.Contains(t, logBuffer.String(), "hunt round skipped: 已有獵捕回合進行中")
 }
 
 func TestHuntPipelineJobStopLetsTheRoundFinishItsStep(t *testing.T) {

@@ -469,15 +469,21 @@ func TestGetCoinFilterResultsOfPipelineRun(t *testing.T) {
 		underTest := newCoinFilteringUnderTest(t)
 		underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(2)).Return(entities.PipelineRun{ID: 2}, nil)
 		underTest.coinFilterResults.EXPECT().FindByPipelineRunID(gomock.Any(), uint(2)).Return([]entities.CoinFilterResult{
-			{PipelineRunID: 2, CoinSymbol: "GRASS", IsKept: true}, {PipelineRunID: 2, CoinSymbol: "PUMP", IsKept: false},
+			{PipelineRunID: 2, CoinSymbol: "GRASS", IsKept: true, Verdicts: []entities.CoinFilterVerdictRecord{
+				{FilterName: "unlockSchedule", Outcome: "noData", Reason: "查不到解鎖時程"}}},
+			{PipelineRunID: 2, CoinSymbol: "PUMP", IsKept: false, Verdicts: []entities.CoinFilterVerdictRecord{
+				{FilterName: "fullyDilutedValuation", Outcome: "rejected", Reason: "完全稀釋估值 52 億美元高於上限 10 億美元"}}},
 		}, nil)
 
 		coinFilterResults, findError := underTest.coinFilteringApplication.GetCoinFilterResultsOfPipelineRun(context.Background(), 2)
 
 		require.NoError(t, findError)
-		require.Len(t, coinFilterResults, 2)
-		assert.True(t, coinFilterResults[0].IsKept)
-		assert.False(t, coinFilterResults[1].IsKept)
+		assert.Equal(t, []dto.CoinFilterResultDto{
+			{PipelineRunID: 2, CoinSymbol: "GRASS", IsKept: true, Verdicts: []dto.CoinFilterVerdictDto{
+				{FilterName: "unlockSchedule", Outcome: "noData", Reason: "查不到解鎖時程"}}},
+			{PipelineRunID: 2, CoinSymbol: "PUMP", IsKept: false, Verdicts: []dto.CoinFilterVerdictDto{
+				{FilterName: "fullyDilutedValuation", Outcome: "rejected", Reason: "完全稀釋估值 52 億美元高於上限 10 億美元"}}},
+		}, coinFilterResults)
 	})
 
 	t.Run("an unknown run", func(t *testing.T) {
@@ -498,4 +504,66 @@ func TestGetCoinFilterResultsOfPipelineRun(t *testing.T) {
 
 		assert.ErrorContains(t, findError, "disk")
 	})
+}
+
+func TestFilterCoinCandidatesReportsATimedOutSourceAsAConnectionTimeout(t *testing.T) {
+	controller := gomock.NewController(t)
+	underTest := newCoinFilteringUnderTest(t, "ZORA")
+	underTest.answerMarketData(map[string]vo.CoinMarketDataVo{}, map[string]vo.CoinMarketDataVo{})
+	underTest.binanceListing.EXPECT().FindUsdtPerpetualCoinSymbols(gomock.Any()).Return(map[string]bool{}, nil)
+	underTest.bybitListing.EXPECT().FindUsdtPerpetualCoinSymbols(gomock.Any()).DoAndReturn(func(sourceContext context.Context) (map[string]bool, error) {
+		<-sourceContext.Done()
+		return nil, sourceContext.Err()
+	})
+	underTest.okxListing.EXPECT().FindUsdtPerpetualCoinSymbols(gomock.Any()).Return(map[string]bool{}, nil)
+	clockProxy := mocks.NewMockIClockProxy(controller)
+	clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
+	coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
+		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResults,
+		service.NewCoinProfileService(underTest.coinIntelligences,
+			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
+			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
+			underTest.tokenUnlocks, 50*time.Millisecond),
+		defaultFilterHandlers(), clockProxy))
+
+	pipelineRun, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
+
+	require.NoError(t, filterError)
+	assert.Equal(t, string(vo.PipelineRunStatusFailed), pipelineRun.Status)
+	assert.Equal(t, "資料來源無法取得：Bybit 永續合約清單（連線逾時）", pipelineRun.FailureReason)
+}
+
+func TestFilterCoinCandidatesChecksOnlyTheDeclaredContract(t *testing.T) {
+	tronContract := vo.TokenAddressVo{ChainID: "tron", Address: "T9yD"}
+	underTest := newCoinFilteringUnderTest(t, "SUN", "MULTI")
+	underTest.coinIntelligences = nil
+	controller := gomock.NewController(t)
+	coinIntelligences := mocks.NewMockICoinIntelligenceRepository(controller)
+	coinIntelligences.EXPECT().FindDeclaredContractAddresses(gomock.Any(), gomock.Any()).Return(map[string]vo.TokenAddressVo{"SUN": tronContract}, nil)
+	clockProxy := mocks.NewMockIClockProxy(controller)
+	clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
+	coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
+		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResults,
+		service.NewCoinProfileService(coinIntelligences,
+			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
+			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
+			underTest.tokenUnlocks, time.Second),
+		defaultFilterHandlers(), clockProxy))
+	bscContract := vo.TokenAddressVo{ChainID: vo.ChainBsc, Address: "0xbsc"}
+	ethereumContract := vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xeth"}
+	underTest.answerMarketData(map[string]vo.CoinMarketDataVo{
+		"SUN":   healthyMarketData("sun-token", ethereumContract),
+		"MULTI": healthyMarketData("multi", bscContract, ethereumContract),
+	}, map[string]vo.CoinMarketDataVo{})
+	underTest.answerListings(map[string]bool{"SUN": true, "MULTI": true}, map[string]bool{}, map[string]bool{})
+	underTest.answerUnlocks(map[string][]vo.TokenUnlockEventVo{})
+	// Ethereum outranks BNB chain; the tron coin is never checked through some other chain's contract.
+	underTest.tokenSecurity.EXPECT().FindTokenSecurity(gomock.Any(), ethereumContract).Return(vo.TokenSecurityVo{}, true, nil).Times(1)
+
+	_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
+
+	require.NoError(t, filterError)
+	assert.Equal(t, "passed", verdictOf(underTest.savedResult(t, "MULTI"), "securityCheck").Outcome)
+	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "securityCheck", Outcome: "noData", Reason: "沒有主流鏈上的合約位址"},
+		verdictOf(underTest.savedResult(t, "SUN"), "securityCheck"))
 }

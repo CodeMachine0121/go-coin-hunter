@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -68,6 +69,15 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		coinIdentities = append(coinIdentities, coinIdentity)
 	}
 
+	// sourceUnavailable names the failed source; a source cut off by its deadline reads as a connection timeout.
+	sourceUnavailable := func(sourceName string, sourceError error) error {
+		reason := sourceError.Error()
+		if errors.Is(sourceError, context.DeadlineExceeded) {
+			reason = domains.InformationSourceTimedOutReason
+		}
+		return fmt.Errorf("%w：%s（%s）", domains.ErrCoinProfileSourceUnavailable, sourceName, reason)
+	}
+
 	// Market data: the first source in priority order that knows a coin speaks for it.
 	marketDataBySymbol := map[string]vo.CoinMarketDataVo{}
 	for _, coinMarketDataProxy := range coinProfileService.coinMarketDataProxies {
@@ -75,7 +85,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		foundMarketData, marketDataError := coinMarketDataProxy.FindCoinMarketData(sourceContext, coinIdentities)
 		cancelSource()
 		if marketDataError != nil {
-			return nil, fmt.Errorf("%w：%s（%v）", domains.ErrCoinProfileSourceUnavailable, coinMarketDataProxy.SourceName(), marketDataError)
+			return nil, sourceUnavailable(coinMarketDataProxy.SourceName(), marketDataError)
 		}
 		for coinSymbol, marketData := range foundMarketData {
 			if _, known := marketDataBySymbol[coinSymbol]; !known {
@@ -98,8 +108,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 	waitGroup.Wait()
 	for index, listingError := range listingErrors {
 		if listingError != nil {
-			return nil, fmt.Errorf("%w：%s 永續合約清單（%v）", domains.ErrCoinProfileSourceUnavailable,
-				coinProfileService.perpetualContractListingProxies[index].ExchangeName(), listingError)
+			return nil, sourceUnavailable(coinProfileService.perpetualContractListingProxies[index].ExchangeName()+" 永續合約清單", listingError)
 		}
 	}
 
@@ -114,7 +123,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 			}
 		}
 
-		// The contract to check: the one found on-chain, else the first listed contract on a supported chain.
+		// The contract to check: the one found on-chain and nothing else, or else the listed contract on the first supported chain.
 		candidateAddresses := []vo.TokenAddressVo{}
 		if coinIdentity.DeclaredContractAddress != nil {
 			candidateAddresses = append(candidateAddresses, *coinIdentity.DeclaredContractAddress)
@@ -122,6 +131,9 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		if marketData, known := marketDataBySymbol[coinIdentity.CoinSymbol]; known {
 			coinProfile.MarketData = &marketData
 			for _, chainID := range securityCheckChainPriority {
+				if coinIdentity.DeclaredContractAddress != nil {
+					break
+				}
 				for _, contractAddress := range marketData.ContractAddresses {
 					if contractAddress.ChainID == chainID {
 						candidateAddresses = append(candidateAddresses, contractAddress)
@@ -157,7 +169,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		tokenSecurity, found, securityError := coinProfileService.tokenSecurityProxy.FindTokenSecurity(sourceContext, *coinProfile.ContractAddress)
 		cancelSource()
 		if securityError != nil {
-			return nil, fmt.Errorf("%w：%s（%v）", domains.ErrCoinProfileSourceUnavailable, coinProfileService.tokenSecurityProxy.SourceName(), securityError)
+			return nil, sourceUnavailable(coinProfileService.tokenSecurityProxy.SourceName(), securityError)
 		}
 		if found {
 			coinProfile.TokenSecurity = &tokenSecurity
@@ -169,7 +181,7 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		unlockEventsBySymbol, unlockError := coinProfileService.tokenUnlockScheduleProxy.FindTokenUnlockEvents(sourceContext, coinUnlockLookups)
 		cancelSource()
 		if unlockError != nil {
-			return nil, fmt.Errorf("%w：%s（%v）", domains.ErrCoinProfileSourceUnavailable, coinProfileService.tokenUnlockScheduleProxy.SourceName(), unlockError)
+			return nil, sourceUnavailable(coinProfileService.tokenUnlockScheduleProxy.SourceName(), unlockError)
 		}
 		for index := range coinProfiles {
 			if unlockEvents, covered := unlockEventsBySymbol[coinProfiles[index].CoinSymbol]; covered {

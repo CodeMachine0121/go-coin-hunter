@@ -45,3 +45,12 @@ func TestCoinIntelligenceRepositoryFindsTheLatestDeclaredContract(t *testing.T) 
 	require.NoError(t, findError)
 	assert.Equal(t, map[string]vo.TokenAddressVo{"DOUU": {ChainID: "solana", Address: "NewMint"}}, declaredContractAddresses)
 }
+
+func TestCoinFilterResultRepositoryRefusesASecondResultForTheSameCoinInARun(t *testing.T) {
+	coinFilterResultRepository := persistence.NewCoinFilterResultRepository(newMigratedDatabase(t))
+	require.NoError(t, coinFilterResultRepository.CreateAll(context.Background(), []entities.CoinFilterResult{{PipelineRunID: 3, CoinSymbol: "ZORA", Verdicts: []entities.CoinFilterVerdictRecord{}}}))
+
+	duplicateError := coinFilterResultRepository.CreateAll(context.Background(), []entities.CoinFilterResult{{PipelineRunID: 3, CoinSymbol: "ZORA", Verdicts: []entities.CoinFilterVerdictRecord{}}})
+
+	assert.Error(t, duplicateError)
+}

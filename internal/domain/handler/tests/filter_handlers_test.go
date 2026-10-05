@@ -99,6 +99,9 @@ func TestCirculatingRatioFilterHandler(t *testing.T) {
 			CirculatingSupply: amount("200000000"), MaxSupply: amount("1000000000"), TotalSupply: amount("300000000")}}, wantOutcome: vo.FilterOutcomePassed},
 		{name: "nineteen percent is rejected", coinProfile: vo.CoinProfileVo{MarketData: &vo.CoinMarketDataVo{
 			CirculatingSupply: amount("190000000"), MaxSupply: amount("1000000000")}}, wantOutcome: vo.FilterOutcomeRejected, wantReason: "流通比 19% 低於門檻 20%"},
+		{name: "the maximum is used over the total when both exist", coinProfile: vo.CoinProfileVo{MarketData: &vo.CoinMarketDataVo{
+			CirculatingSupply: amount("150000000"), MaxSupply: amount("1000000000"), TotalSupply: amount("500000000")}},
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "流通比 15% 低於門檻 20%"},
 		{name: "no maximum falls back to the total", coinProfile: vo.CoinProfileVo{MarketData: &vo.CoinMarketDataVo{
 			CirculatingSupply: amount("300000000"), TotalSupply: amount("1000000000")}}, wantOutcome: vo.FilterOutcomePassed},
 		{name: "a zero maximum falls back to the total", coinProfile: vo.CoinProfileVo{MarketData: &vo.CoinMarketDataVo{

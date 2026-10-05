@@ -51,10 +51,11 @@ func (defiLlamaTokenUnlockScheduleProxy *DefiLlamaTokenUnlockScheduleProxy) Find
 			if protocolSlug == "" || !knownSlugs[protocolSlug] {
 				continue
 			}
+			// One protocol's dataset failing leaves that coin uncovered; only the list failing means the source is down.
 			emission, emissionError := utilities.GetJson[defiLlamaEmissionWire](executionContext, defiLlamaTokenUnlockScheduleProxy.httpClient,
 				defiLlamaTokenUnlockScheduleProxy.baseUrl+"/emissions/"+url.PathEscape(protocolSlug))
 			if emissionError != nil {
-				return nil, emissionError
+				continue
 			}
 			sameCoin := (emission.GeckoID != "" && emission.GeckoID == coinUnlockLookup.CoinGeckoID) ||
 				(emission.GeckoID == "" && strings.EqualFold(emission.Name, coinUnlockLookup.Name))

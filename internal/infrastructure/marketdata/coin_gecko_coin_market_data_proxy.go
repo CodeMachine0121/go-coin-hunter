@@ -63,8 +63,10 @@ func (coinGeckoCoinMarketDataProxy *CoinGeckoCoinMarketDataProxy) FindCoinMarket
 	coinIDsToPrice := []string{}
 	possibleCoinIDsBySymbol := map[string][]string{}
 	for _, coinIdentity := range coinIdentities {
+		// A coin found on-chain is that contract and nothing else: an unknown contract is never stood in for by its symbol.
 		possibleCoinIDs := coinIDsBySymbol[coinIdentity.CoinSymbol]
 		if coinIdentity.DeclaredContractAddress != nil {
+			possibleCoinIDs = []string{}
 			if coinID, matched := coinIDByContract[domains.NewTokenAddressDomain(*coinIdentity.DeclaredContractAddress).ComparisonKey()]; matched {
 				possibleCoinIDs = []string{coinID}
 			}

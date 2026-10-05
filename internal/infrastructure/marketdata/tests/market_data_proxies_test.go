@@ -2,8 +2,10 @@ package marketdata_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,18 +46,21 @@ func TestCoinGeckoMatchesByContractFirstThenLargestMarketCap(t *testing.T) {
 			{"id":"pengu-copy","symbol":"pengu","name":"Copy","platforms":{}},
 			{"id":"cryptotwitter","symbol":"ct","name":"CryptoTwitter","platforms":{"ethereum":"0xCTWRONG"}},
 			{"id":"cotton","symbol":"ct","name":"Cotton","platforms":{"ethereum":"0xC0770N"}},
-			{"id":"nothing","symbol":"none","name":"Unpriced","platforms":{}}]`,
+			{"id":"nothing","symbol":"none","name":"Unpriced","platforms":{}},
+			{"id":"pengu2-impostor","symbol":"pengu2","name":"Impostor","platforms":{}}]`,
 		"/api/v3/coins/markets": `[
 			{"id":"pudgy-penguins","name":"Pudgy Penguins","market_cap":613916781,"fully_diluted_valuation":868117026,"total_volume":"172066967.5","circulating_supply":62860396090,"total_supply":76722796386.4517,"max_supply":88888888888},
 			{"id":"pengu-copy","name":"Copy","market_cap":null,"fully_diluted_valuation":null,"total_volume":5,"circulating_supply":null,"total_supply":null,"max_supply":null},
 			{"id":"cryptotwitter","name":"CryptoTwitter","market_cap":33696},
-			{"id":"cotton","name":"Cotton","market_cap":12,"max_supply":null}]`,
+			{"id":"cotton","name":"Cotton","market_cap":12,"max_supply":null},
+			{"id":"pengu2-impostor","name":"Impostor","market_cap":999999999}]`,
 	})
 	proxy := marketdata.NewCoinGeckoCoinMarketDataProxy(http.DefaultClient, baseUrl)
 
 	marketData, findError := proxy.FindCoinMarketData(context.Background(), []vo.CoinIdentityVo{
 		{CoinSymbol: "PENGU"},
 		{CoinSymbol: "CT", DeclaredContractAddress: &vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xc0770n"}},
+		{CoinSymbol: "PENGU2", DeclaredContractAddress: &vo.TokenAddressVo{ChainID: vo.ChainSolana, Address: "UnknownToCoinGecko"}},
 		{CoinSymbol: "NONE"},
 		{CoinSymbol: "MISSING"},
 	})
@@ -71,6 +76,7 @@ func TestCoinGeckoMatchesByContractFirstThenLargestMarketCap(t *testing.T) {
 	assert.Equal(t, "cotton", marketData["CT"].CoinGeckoID)
 	assert.Nil(t, marketData["CT"].MaxSupply)
 	assert.NotContains(t, marketData, "NONE")
+	assert.NotContains(t, marketData, "PENGU2")
 	assert.NotContains(t, marketData, "MISSING")
 }
 
@@ -103,12 +109,15 @@ func TestGoPlusReadsEvmAndSolanaFindings(t *testing.T) {
 			"is_mintable":"1","transfer_pausable":"1","is_blacklisted":"1","owner_address":"0x0000000000000000000000000000000000000000"}}}`,
 		"/api/v1/token_security/56?contract_addresses=0xOwned": `{"code":1,"result":{"0xowned":{"is_honeypot":"1","cannot_sell_all":"1","buy_tax":"","sell_tax":"",
 			"is_mintable":"1","transfer_pausable":"0","is_blacklisted":"1","owner_address":"0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"}}}`,
-		"/api/v1/token_security/8453?contract_addresses=0xHidden":   `{"code":1,"result":{"0xhidden":{"is_mintable":"1","hidden_owner":"1"}}}`,
-		"/api/v1/token_security/1?contract_addresses=0xUnknown":     `{"code":1,"result":{}}`,
-		"/api/v1/token_security/1?contract_addresses=0xLimited":     `{"code":4029,"message":"too many requests","result":{}}`,
-		"/api/v1/solana/token_security?contract_addresses=DouuMint": `{"code":1,"result":{"DouuMint":{"mintable":{"status":"1"},"freezable":{"status":"0"},"non_transferable":"0"}}}`,
-		"/api/v1/solana/token_security?contract_addresses=Gone":     `{"code":1,"result":{}}`,
-		"/api/v1/solana/token_security?contract_addresses=Limited":  `{"code":4029,"message":"too many requests"}`,
+		"/api/v1/token_security/8453?contract_addresses=0xHidden":     `{"code":1,"result":{"0xhidden":{"is_mintable":"1","hidden_owner":"1"}}}`,
+		"/api/v1/token_security/1?contract_addresses=0xUnknown":       `{"code":1,"result":{}}`,
+		"/api/v1/token_security/1?contract_addresses=0xTakeBack":      `{"code":1,"result":{"0xtakeback":{"is_mintable":"1","owner_address":"0x0000000000000000000000000000000000000000","can_take_back_ownership":"1"}}}`,
+		"/api/v1/token_security/1?contract_addresses=0xNoOwner":       `{"code":1,"result":{"0xnoowner":{"is_mintable":"1","is_blacklisted":"1","owner_address":""}}}`,
+		"/api/v1/solana/token_security?contract_addresses=FreezeMint": `{"code":1,"result":{"FreezeMint":{"mintable":{"status":"0"},"freezable":{"status":"1"},"non_transferable":"1"}}}`,
+		"/api/v1/token_security/1?contract_addresses=0xLimited":       `{"code":4029,"message":"too many requests","result":{}}`,
+		"/api/v1/solana/token_security?contract_addresses=DouuMint":   `{"code":1,"result":{"DouuMint":{"mintable":{"status":"1"},"freezable":{"status":"0"},"non_transferable":"0"}}}`,
+		"/api/v1/solana/token_security?contract_addresses=Gone":       `{"code":1,"result":{}}`,
+		"/api/v1/solana/token_security?contract_addresses=Limited":    `{"code":4029,"message":"too many requests"}`,
 	})
 	proxy := marketdata.NewGoPlusTokenSecurityProxy(http.DefaultClient, baseUrl, 0)
 
@@ -122,6 +131,15 @@ func TestGoPlusReadsEvmAndSolanaFindings(t *testing.T) {
 
 	hidden, _, _ := proxy.FindTokenSecurity(context.Background(), vo.TokenAddressVo{ChainID: vo.ChainBase, Address: "0xHidden"})
 	assert.True(t, hidden.IsMintable)
+
+	takeBack, _, _ := proxy.FindTokenSecurity(context.Background(), vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xTakeBack"})
+	assert.True(t, takeBack.IsMintable)
+
+	noOwner, _, _ := proxy.FindTokenSecurity(context.Background(), vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xNoOwner"})
+	assert.Equal(t, vo.TokenSecurityVo{}, noOwner)
+
+	freezing, _, _ := proxy.FindTokenSecurity(context.Background(), vo.TokenAddressVo{ChainID: vo.ChainSolana, Address: "FreezeMint"})
+	assert.Equal(t, vo.TokenSecurityVo{CannotSell: true, CanFreezeHolders: true}, freezing)
 
 	_, found, findError = proxy.FindTokenSecurity(context.Background(), vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xUnknown"})
 	require.NoError(t, findError)
@@ -234,6 +252,7 @@ func TestDefiLlamaMatchesProtocolsAndSumsEachUnlock(t *testing.T) {
 func TestMarketDataProxiesFailOnBadAnswers(t *testing.T) {
 	broken := func(t *testing.T, routes map[string]string) string { return serveRoutes(t, routes) }
 	ethereumIdentity := []vo.CoinIdentityVo{{CoinSymbol: "CT", DeclaredContractAddress: &vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0x1"}}}
+	symbolIdentity := []vo.CoinIdentityVo{{CoinSymbol: "CT"}}
 	testCases := []struct {
 		name  string
 		fetch func(baseUrl string) error
@@ -244,12 +263,12 @@ func TestMarketDataProxiesFailOnBadAnswers(t *testing.T) {
 			return fetchError
 		}},
 		{name: "coingecko markets unreachable", route: map[string]string{"/api/v3/coins/list": `[{"id":"ct","symbol":"ct","platforms":{}}]`}, fetch: func(baseUrl string) error {
-			_, fetchError := marketdata.NewCoinGeckoCoinMarketDataProxy(http.DefaultClient, baseUrl).FindCoinMarketData(context.Background(), ethereumIdentity)
+			_, fetchError := marketdata.NewCoinGeckoCoinMarketDataProxy(http.DefaultClient, baseUrl).FindCoinMarketData(context.Background(), symbolIdentity)
 			return fetchError
 		}},
 		{name: "coingecko a malformed figure", route: map[string]string{"/api/v3/coins/list": `[{"id":"ct","symbol":"ct","platforms":{}}]`,
 			"/api/v3/coins/markets": `[{"id":"ct","market_cap":"lots"}]`}, fetch: func(baseUrl string) error {
-			_, fetchError := marketdata.NewCoinGeckoCoinMarketDataProxy(http.DefaultClient, baseUrl).FindCoinMarketData(context.Background(), ethereumIdentity)
+			_, fetchError := marketdata.NewCoinGeckoCoinMarketDataProxy(http.DefaultClient, baseUrl).FindCoinMarketData(context.Background(), symbolIdentity)
 			return fetchError
 		}},
 		{name: "dex screener unreachable", route: map[string]string{}, fetch: func(baseUrl string) error {
@@ -296,11 +315,6 @@ func TestMarketDataProxiesFailOnBadAnswers(t *testing.T) {
 			_, fetchError := marketdata.NewDefiLlamaTokenUnlockScheduleProxy(http.DefaultClient, baseUrl).FindTokenUnlockEvents(context.Background(), nil)
 			return fetchError
 		}},
-		{name: "defillama protocol unreachable", route: map[string]string{"/emissionsProtocolsList": `["grass"]`}, fetch: func(baseUrl string) error {
-			_, fetchError := marketdata.NewDefiLlamaTokenUnlockScheduleProxy(http.DefaultClient, baseUrl).FindTokenUnlockEvents(context.Background(),
-				[]vo.CoinUnlockLookupVo{{CoinSymbol: "GRASS", CoinGeckoID: "grass"}})
-			return fetchError
-		}},
 		{name: "an unparseable address", route: map[string]string{}, fetch: func(string) error {
 			_, fetchError := marketdata.NewOkxPerpetualContractListingProxy(http.DefaultClient, "http://bad host").FindUsdtPerpetualCoinSymbols(context.Background())
 			return fetchError
@@ -331,4 +345,90 @@ func TestGoPlusStopsWaitingWhenTheContextEnds(t *testing.T) {
 	_, _, findError := proxy.FindTokenSecurity(expired, vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0x1"})
 
 	assert.ErrorIs(t, findError, context.Canceled)
+}
+
+func TestDefiLlamaLeavesACoinUncoveredWhenItsDatasetCannotBeRead(t *testing.T) {
+	proxy := marketdata.NewDefiLlamaTokenUnlockScheduleProxy(http.DefaultClient, serveRoutes(t, map[string]string{
+		"/emissionsProtocolsList": `["grass","zora"]`,
+		"/emissions/zora":         `{"name":"Zora","gecko_id":"zora","metadata":{"events":[]}}`,
+	}))
+
+	unlockEvents, findError := proxy.FindTokenUnlockEvents(context.Background(), []vo.CoinUnlockLookupVo{
+		{CoinSymbol: "GRASS", CoinGeckoID: "grass", Name: "Grass"}, {CoinSymbol: "ZORA", CoinGeckoID: "zora", Name: "Zora"},
+	})
+
+	require.NoError(t, findError)
+	assert.Equal(t, map[string][]vo.TokenUnlockEventVo{"ZORA": {}}, unlockEvents)
+}
+
+// countingServer answers every request with the body and records how many items each request asked for.
+func countingServer(t *testing.T, body string, itemsOf func(request *http.Request) int) (string, *[]int) {
+	itemCounts := []int{}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if count := itemsOf(request); count > 0 {
+			itemCounts = append(itemCounts, count)
+		}
+		_, _ = writer.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+
+	return server.URL, &itemCounts
+}
+
+func TestMarketDataLookupsStayInsideBatchLimits(t *testing.T) {
+	t.Run("coingecko prices at most 250 coins per request", func(t *testing.T) {
+		coinList := "["
+		coinIdentities := []vo.CoinIdentityVo{}
+		for index := range 251 {
+			if index > 0 {
+				coinList += ","
+			}
+			coinList += fmt.Sprintf(`{"id":"coin-%d","symbol":"c%d","platforms":{}}`, index, index)
+			coinIdentities = append(coinIdentities, vo.CoinIdentityVo{CoinSymbol: fmt.Sprintf("C%d", index)})
+		}
+		coinList += "]"
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/api/v3/coins/list" {
+				_, _ = writer.Write([]byte(coinList))
+				return
+			}
+			_, _ = writer.Write([]byte(`[]`))
+		}))
+		t.Cleanup(server.Close)
+		requestedBatches := []int{}
+		recordingClient := &http.Client{Transport: roundTripRecorder(func(request *http.Request) {
+			if request.URL.Path == "/api/v3/coins/markets" {
+				requestedBatches = append(requestedBatches, len(strings.Split(request.URL.Query().Get("ids"), ",")))
+			}
+		})}
+
+		_, findError := marketdata.NewCoinGeckoCoinMarketDataProxy(recordingClient, server.URL).FindCoinMarketData(context.Background(), coinIdentities)
+
+		require.NoError(t, findError)
+		assert.Equal(t, []int{250, 1}, requestedBatches)
+	})
+
+	t.Run("dex screener looks up at most 30 contracts per request", func(t *testing.T) {
+		coinIdentities := []vo.CoinIdentityVo{}
+		for index := range 31 {
+			coinIdentities = append(coinIdentities, vo.CoinIdentityVo{CoinSymbol: fmt.Sprintf("T%d", index),
+				DeclaredContractAddress: &vo.TokenAddressVo{ChainID: vo.ChainSolana, Address: fmt.Sprintf("Mint%d", index)}})
+		}
+		baseUrl, itemCounts := countingServer(t, `[]`, func(request *http.Request) int {
+			return len(strings.Split(strings.TrimPrefix(request.URL.Path, "/tokens/v1/solana/"), ","))
+		})
+
+		_, findError := marketdata.NewDexScreenerCoinMarketDataProxy(http.DefaultClient, baseUrl).FindCoinMarketData(context.Background(), coinIdentities)
+
+		require.NoError(t, findError)
+		assert.Equal(t, []int{30, 1}, *itemCounts)
+	})
+}
+
+// roundTripRecorder sees each outgoing request before the default transport sends it.
+type roundTripRecorder func(request *http.Request)
+
+func (recorder roundTripRecorder) RoundTrip(request *http.Request) (*http.Response, error) {
+	recorder(request)
+	return http.DefaultTransport.RoundTrip(request)
 }

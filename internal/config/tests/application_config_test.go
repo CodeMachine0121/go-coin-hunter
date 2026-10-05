@@ -59,6 +59,16 @@ func TestLoadReadsFilteringThresholds(t *testing.T) {
 	assert.Equal(t, 2*time.Second, filteringConfig.TokenSecurityRequestInterval)
 }
 
+func TestLoadReadsTheHuntPipelineInterval(t *testing.T) {
+	testCases := map[string]time.Duration{"": 4 * time.Hour, "6": 6 * time.Hour, "0": 0, "-1": -time.Hour, "often": 4 * time.Hour}
+
+	for rawValue, wantInterval := range testCases {
+		t.Setenv("HUNT_PIPELINE_INTERVAL_HOURS", rawValue)
+
+		assert.Equal(t, wantInterval, config.Load().HuntPipelineInterval, rawValue)
+	}
+}
+
 func TestLoadVerdictSettings(t *testing.T) {
 	t.Setenv("VERDICT_MODEL", "")
 	t.Setenv("VERDICT_EFFORT", "")

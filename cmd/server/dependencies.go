@@ -16,6 +16,7 @@ import (
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/news"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/persistence"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/job"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -148,10 +149,34 @@ type applications struct {
 	coinFiltering *application.CoinFilteringApplication
 	coinInsight   *application.CoinInsightApplication
 	huntVerdict   *application.HuntVerdictApplication
+	huntPipeline  *application.HuntPipelineApplication
 	pipelineRun   *application.PipelineRunApplication
 }
 
 func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConfig) applications {
+	builtServices := servicesFor(database, applicationConfig)
+
+	return applications{
+		coinDiscovery: application.NewCoinDiscoveryApplication(builtServices.coinDiscovery),
+		coinFiltering: application.NewCoinFilteringApplication(builtServices.coinFiltering),
+		coinInsight:   application.NewCoinInsightApplication(builtServices.coinInsight),
+		huntVerdict:   application.NewHuntVerdictApplication(builtServices.huntVerdict),
+		huntPipeline: application.NewHuntPipelineApplication(
+			builtServices.coinDiscovery, builtServices.coinFiltering, builtServices.coinInsight, builtServices.huntVerdict),
+		pipelineRun: application.NewPipelineRunApplication(builtServices.pipelineRun),
+	}
+}
+
+// services are the domain services every application shares, built once.
+type services struct {
+	coinDiscovery *service.CoinDiscoveryService
+	coinFiltering *service.CoinFilteringService
+	coinInsight   *service.CoinInsightService
+	huntVerdict   *service.HuntVerdictService
+	pipelineRun   *service.PipelineRunService
+}
+
+func servicesFor(database *gorm.DB, applicationConfig config.ApplicationConfig) services {
 	clockProxy := clock.NewSystemClockProxy()
 	pipelineRunRepository := persistence.NewPipelineRunRepository(database)
 	// One way out to Claude for both the insight analyst and the chief investment officer.
@@ -160,8 +185,8 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 		insightModelSettings, verdictModelSettings)
 	coinCandidateRepository := persistence.NewCoinCandidateRepository(database)
 
-	return applications{
-		coinDiscovery: application.NewCoinDiscoveryApplication(service.NewCoinDiscoveryService(
+	return services{
+		coinDiscovery: service.NewCoinDiscoveryService(
 			informationSourcesFor(applicationConfig.Discovery),
 			pipelineRunRepository,
 			persistence.NewInformationSourceOutcomeRepository(database),
@@ -174,17 +199,17 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 				ItemLimitPerSource:   applicationConfig.Discovery.ItemLimitPerSource,
 				SourceRequestTimeout: applicationConfig.Discovery.SourceRequestTimeout,
 			},
-		)),
-		coinFiltering: application.NewCoinFilteringApplication(service.NewCoinFilteringService(
+		),
+		coinFiltering: service.NewCoinFilteringService(
 			pipelineRunRepository,
 			coinCandidateRepository,
 			persistence.NewCoinFilterResultRepository(database),
 			coinProfileServiceFor(database, applicationConfig),
 			filterHandlersFor(applicationConfig.Filtering),
 			clockProxy,
-		)),
-		coinInsight: application.NewCoinInsightApplication(coinInsightServiceFor(database, applicationConfig, clockProxy, claudeAnalysisProxy)),
-		huntVerdict: application.NewHuntVerdictApplication(service.NewHuntVerdictService(
+		),
+		coinInsight: coinInsightServiceFor(database, applicationConfig, clockProxy, claudeAnalysisProxy),
+		huntVerdict: service.NewHuntVerdictService(
 			pipelineRunRepository,
 			persistence.NewCoinInsightRepository(database),
 			persistence.NewCoinVerdictRepository(database),
@@ -194,8 +219,8 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 			claudeAnalysisProxy,
 			clockProxy,
 			huntVerdictPolicyFor(),
-		)),
-		pipelineRun: application.NewPipelineRunApplication(service.NewPipelineRunService(pipelineRunRepository, clockProxy)),
+		),
+		pipelineRun: service.NewPipelineRunService(pipelineRunRepository, clockProxy),
 	}
 }
 
@@ -224,15 +249,18 @@ func registerRoutes(engine *gin.Engine, builtApplications applications) {
 	engine.GET("/hunt-board", huntVerdictController.GetHuntBoard)
 	engine.GET("/pipeline-runs/:pipelineRunId/coin-verdicts", huntVerdictController.GetCoinVerdictsOfPipelineRun)
 
+	huntPipelineController := controller.NewHuntPipelineController(builtApplications.huntPipeline)
+	engine.POST("/hunt-rounds", huntPipelineController.RunHuntRound)
+
 	pipelineRunController := controller.NewPipelineRunController(builtApplications.pipelineRun)
 	engine.GET("/pipeline-runs", pipelineRunController.GetPipelineRuns)
 }
 
-// backgroundJobsFor returns no jobs when the global switch is off, which is how StartAll is disabled.
-func backgroundJobsFor(applicationConfig config.ApplicationConfig, _ applications) []domaininterface.IBackgroundJob {
-	if !applicationConfig.BackgroundJobsEnabled {
+// backgroundJobsFor returns no jobs when the global switch is off or the hunt round interval is not positive.
+func backgroundJobsFor(applicationConfig config.ApplicationConfig, builtApplications applications) []domaininterface.IBackgroundJob {
+	if !applicationConfig.BackgroundJobsEnabled || applicationConfig.HuntPipelineInterval <= 0 {
 		return nil
 	}
 
-	return []domaininterface.IBackgroundJob{}
+	return []domaininterface.IBackgroundJob{job.NewHuntPipelineJob(builtApplications.huntPipeline, applicationConfig.HuntPipelineInterval)}
 }

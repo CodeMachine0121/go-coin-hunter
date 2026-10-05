@@ -17,7 +17,9 @@ import (
 	"github.com/joho/godotenv"
 )
 
-const shutdownGracePeriod = 30 * time.Second
+// shutdownGracePeriod outlasts the slowest single step, the chief investment officer's 180-second answer, so a round
+// stopping at a step boundary is not cut off.
+const shutdownGracePeriod = 4 * time.Minute
 
 func main() {
 	if loadError := godotenv.Load(); loadError != nil {
@@ -50,8 +52,12 @@ func main() {
 	engine := gin.Default()
 	registerRoutes(engine, builtApplications)
 
+	// Jobs get their own context: on shutdown they are first asked to stop at a step boundary, and only abandoned if the
+	// grace period runs out.
+	jobsContext, abandonJobs := context.WithCancel(context.Background())
+	defer abandonJobs()
 	backgroundJobManager := job.NewBackgroundJobManager(backgroundJobsFor(applicationConfig, builtApplications))
-	backgroundJobManager.StartAll(shutdownSignalled)
+	backgroundJobManager.StartAll(jobsContext)
 
 	server := &http.Server{Addr: applicationConfig.ServerAddress, Handler: engine}
 	go func() {
@@ -69,6 +75,7 @@ func main() {
 		log.Printf("failed to shut down http server cleanly: %v", shutdownError)
 	}
 	if !backgroundJobManager.WaitAll(shutdownContext) {
-		log.Println("background jobs did not finish within the grace period")
+		log.Println("background jobs did not finish within the grace period; abandoning them")
+		abandonJobs()
 	}
 }

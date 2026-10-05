@@ -16,7 +16,9 @@ import (
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/news"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/persistence"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/verdict"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -119,11 +121,27 @@ func coinInsightServiceFor(database *gorm.DB, applicationConfig config.Applicati
 	)
 }
 
+// huntVerdictPolicyFor holds the safe ranges every verdict is clamped into: leverage 1-5, position up to 10%,
+// stop loss 1-50% and take profit 1-200% of the latest price.
+func huntVerdictPolicyFor(verdictConfig config.VerdictConfig) vo.HuntVerdictPolicyVo {
+	return vo.HuntVerdictPolicyVo{
+		MinimumLeverage:            1,
+		MaximumLeverage:            5,
+		MaximumPositionSizePercent: decimal.NewFromInt(10),
+		MinimumStopLossPercent:     decimal.NewFromInt(1),
+		MaximumStopLossPercent:     decimal.NewFromInt(50),
+		MinimumTakeProfitPercent:   decimal.NewFromInt(1),
+		MaximumTakeProfitPercent:   decimal.NewFromInt(200),
+		MarketSourceTimeout:        verdictConfig.MarketSourceTimeout,
+	}
+}
+
 // applications are built once by the composition root and shared by routes and background jobs.
 type applications struct {
 	coinDiscovery *application.CoinDiscoveryApplication
 	coinFiltering *application.CoinFilteringApplication
 	coinInsight   *application.CoinInsightApplication
+	huntVerdict   *application.HuntVerdictApplication
 	pipelineRun   *application.PipelineRunApplication
 }
 
@@ -156,6 +174,17 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 			clockProxy,
 		)),
 		coinInsight: application.NewCoinInsightApplication(coinInsightServiceFor(database, applicationConfig, clockProxy)),
+		huntVerdict: application.NewHuntVerdictApplication(service.NewHuntVerdictService(
+			pipelineRunRepository,
+			persistence.NewCoinInsightRepository(database),
+			persistence.NewCoinVerdictRepository(database),
+			persistence.NewHuntBoardRepository(database),
+			perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
+			verdict.NewClaudeHuntVerdictStrategistProxy(applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
+				applicationConfig.Verdict.Model, applicationConfig.Verdict.Effort, applicationConfig.Verdict.SynthesisTimeout),
+			clockProxy,
+			huntVerdictPolicyFor(applicationConfig.Verdict),
+		)),
 		pipelineRun: application.NewPipelineRunApplication(service.NewPipelineRunService(pipelineRunRepository, clockProxy)),
 	}
 }
@@ -179,6 +208,11 @@ func registerRoutes(engine *gin.Engine, builtApplications applications) {
 	engine.POST("/coin-insights", coinInsightController.AnalyzeCoinCandidates)
 	engine.GET("/coin-insights/latest", coinInsightController.GetLatestCoinInsights)
 	engine.GET("/pipeline-runs/:pipelineRunId/coin-insights", coinInsightController.GetCoinInsightsOfPipelineRun)
+
+	huntVerdictController := controller.NewHuntVerdictController(builtApplications.huntVerdict)
+	engine.POST("/hunt-verdicts", huntVerdictController.SynthesizeHuntVerdicts)
+	engine.GET("/hunt-board", huntVerdictController.GetHuntBoard)
+	engine.GET("/pipeline-runs/:pipelineRunId/coin-verdicts", huntVerdictController.GetCoinVerdictsOfPipelineRun)
 
 	pipelineRunController := controller.NewPipelineRunController(builtApplications.pipelineRun)
 	engine.GET("/pipeline-runs", pipelineRunController.GetPipelineRuns)

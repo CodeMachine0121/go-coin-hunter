@@ -20,6 +20,19 @@ func TestPerpetualMarketStructureExchangesAreListedInPreferenceOrder(t *testing.
 	assert.IsType(t, &marketdata.OkxPerpetualMarketStructureProxy{}, proxies[2])
 }
 
+func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
+	huntVerdictPolicy := huntVerdictPolicyFor(config.VerdictConfig{MarketSourceTimeout: 15 * time.Second})
+
+	assert.Equal(t, 1, huntVerdictPolicy.MinimumLeverage)
+	assert.Equal(t, 5, huntVerdictPolicy.MaximumLeverage)
+	assert.Equal(t, "10", huntVerdictPolicy.MaximumPositionSizePercent.String())
+	assert.Equal(t, "1", huntVerdictPolicy.MinimumStopLossPercent.String())
+	assert.Equal(t, "50", huntVerdictPolicy.MaximumStopLossPercent.String())
+	assert.Equal(t, "1", huntVerdictPolicy.MinimumTakeProfitPercent.String())
+	assert.Equal(t, "200", huntVerdictPolicy.MaximumTakeProfitPercent.String())
+	assert.Equal(t, 15*time.Second, huntVerdictPolicy.MarketSourceTimeout)
+}
+
 func TestInsightShowsIntelligenceFromTheDiscoveryWindow(t *testing.T) {
 	coinInsightPolicy := coinInsightPolicyFor(config.ApplicationConfig{
 		Discovery: config.DiscoveryConfig{Window: 24 * time.Hour},

@@ -60,9 +60,9 @@ type IInformationSourceProxy interface {
 | `BybitAnnouncementInformationSourceProxy` | `bybitAnnouncement` | `api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto` | 標題、連結、`dateTimestamp` |
 | `OkxAnnouncementInformationSourceProxy` | `okxAnnouncement` | `www.okx.com/api/v5/support/announcements?annType=announcements-new-listings` | 標題、連結、`pTime` |
 | `CoinGeckoTrendingInformationSourceProxy` | `coinGeckoTrending` | `api.coingecko.com/api/v3/search/trending` | `symbol` 為宣告代號；**無發布時間** |
-| `DexScreenerTokenProfileInformationSourceProxy` | `dexScreenerTokenProfile` | `api.dexscreener.com/token-profiles/latest/v1` → 再以 `/tokens/v1/{chainId}/{addresses}` 批次補代號 | 宣告代號取 `baseToken.symbol`；原文識別 = `chainId:tokenAddress`；**無發布時間** |
+| `DexScreenerTokenProfileInformationSourceProxy` | `dexScreenerTokenProfile` | `api.dexscreener.com/token-profiles/latest/v1` → 再以 `/tokens/v1/{chainId}/{addresses}` 批次補代號 | 宣告代號取 `baseToken.symbol`；原文識別 = `chainId:tokenAddress`；發布時間 = 最早交易對的 `pairCreatedAt`（PRD §4：新幣看重開始交易的時間），查無交易對則留空 |
 
-全部共用一個帶逾時的 `*http.Client`，基礎網址由設定注入（測試以 `httptest` 換掉）。
+全部共用一個 `*http.Client`（不設 client 逾時，逾時一律由 service 的每來源 context deadline 控制，逾時錯誤因此可辨識為「連線逾時」），基礎網址由設定注入（測試以 `httptest` 換掉）。回應缺少應有欄位（Bybit `retCode`、幣安 `symbols`、CoinGecko `coins`）視為該來源失敗。
 
 ### 3.3 Domain
 
@@ -70,7 +70,8 @@ type IInformationSourceProxy interface {
 | :--- | :--- | :--- | :--- |
 | `InformationItemVo` | VO | 來源回傳的一則訊息：`SourceName`、`ExternalIdentifier`、`Title`、`Link`、`PublishedAt *time.Time`、`DeclaredCoinSymbols []string`、`IsTraditionalAsset bool`；`ToDomain()` | US-01、US-03 |
 | `InformationItemDomain` | Domain Model | `CoinIntelligences(pipelineRunID, receivedAt) []entities.CoinIntelligence`：宣告代號優先，否則交給 `AnnouncementTitleDomain`；一枚幣一則情報、辨識不出則一則無代號情報；無發布時間以 `receivedAt` 代替；代號一律大寫 | US-01、US-03 |
-| `AnnouncementTitleDomain` | Domain Model | 從公告標題辨識代號：括號代號 `(XXX)`、合約名 `XXXUSDT`；去重保序 | US-01、US-03 |
+| `AnnouncementTitleDomain` | Domain Model | 從公告標題辨識代號：括號代號 `(XXX)`、合約名 `XXXUSDT`（1–15 個大寫英數字）；排除純數字與非代號字（UTC 等）；去重保序 | US-01、US-03 |
+| `InformationSourceResultsDomain` | Domain Model | 一輪所有來源的回應：是否有任一來源成功、轉成來源結果、轉成情報（重構時自 service 收攏） | US-04 |
 | `DiscoveryPolicyVo` | VO | 探索規則：`Window`、`ExcludedCoinSymbols`、`ItemLimitPerSource`、`SourceRequestTimeout` | US-02、US-03 |
 | `CoinCandidateSelectionDomain` | Domain Model | 以 `DiscoveryPolicyVo` + 本輪開始時間，從情報中挑出：有代號、非排除、非傳統金融商品、`PublishedAt >= startedAt - Window`（含邊界）；依代號彙整成 `[]entities.CoinCandidate`（來源數、情報數、最早提及時間），依代號排序 | US-01、US-02、US-03 |
 | `PipelineRunStepVo` / `PipelineRunStatusVo` / `PipelineRunTriggerSourceVo` | VO | `discovery`；`running/succeeded/failed/noData`；`job/manual` | US-04 |
@@ -127,7 +128,7 @@ flowchart TD
 - **Where it lands:** `IInformationSourceProxy` 的 list；`PipelineRunStepVo` 新增步驟值、`PipelineRun.TriggeredByPipelineRunID` 串上游。
 - **How to add it:** 實作 `IInformationSourceProxy`（只做正規化）→ 在 `registerRoutes` 的 list 加一行。代號辨識不夠用時擴充 `AnnouncementTitleDomain`，不要在 Proxy 內自己猜。
 - **Patterns applied & why:** 介面 list 注入（Composite-ish fan-out）— 來源是最常變動的軸；Domain Model 收攏規則 — 規則與來源正交。
-- **Do not hardcode:** 時間窗、排除名單、每來源上限、逾時、各來源網址（全部進 `DiscoveryConfig`）。
+- **Do not hardcode:** 時間窗、排除名單、各來源網址（進 `DiscoveryConfig`，可由環境變數覆寫）；每來源上限與逾時是 PRD 固定規則，寫成 config 常數、不開放覆寫。
 - **Known debt / deferred:** 情報不清除（量小，PostgreSQL 足夠）；來源不重試（下一輪自然再試）。
 
 ---

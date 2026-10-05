@@ -118,6 +118,29 @@ func TestInformationSourceProxiesNormalizeTheirSources(t *testing.T) {
 				Link: "https://www.coingecko.com/en/coins/fetch-ai", DeclaredCoinSymbols: []string{"FET"}}},
 		},
 		{
+			name:   "coingecko trending cut at the limit",
+			routes: map[string]string{"/api/v3/search/trending": `{"coins":[{"item":{"id":"a","symbol":"AAA","name":"A"}},{"item":{"id":"b","symbol":"BBB","name":"B"}}]}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewCoinGeckoTrendingInformationSourceProxy(http.DefaultClient, baseUrl)
+			},
+			itemLimit: 1,
+			want: []vo.InformationItemVo{{SourceName: "coinGeckoTrending", ExternalIdentifier: "a", Title: "A is trending on CoinGecko",
+				Link: "https://www.coingecko.com/en/coins/a", DeclaredCoinSymbols: []string{"AAA"}}},
+		},
+		{
+			name: "dex screener profiles cut at the limit before looking up",
+			routes: map[string]string{
+				"/token-profiles/latest/v1": `[{"url":"https://dex/a","chainId":"solana","tokenAddress":"TokA"},{"url":"https://dex/b","chainId":"solana","tokenAddress":"TokB"}]`,
+				"/tokens/v1/solana/TokA":    `[{"chainId":"solana","baseToken":{"address":"TokA","name":"Douu","symbol":"DOUU"},"pairCreatedAt":1000}]`,
+			},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewDexScreenerTokenProfileInformationSourceProxy(http.DefaultClient, baseUrl)
+			},
+			itemLimit: 1,
+			want: []vo.InformationItemVo{{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:toka", Title: "Douu (DOUU) profiled on solana",
+				Link: "https://dex/a", PublishedAt: millis(1000), DeclaredCoinSymbols: []string{"DOUU"}}},
+		},
+		{
 			name: "dex screener profiles, symbol and earliest pair looked up, unknown token keeps no coin",
 			routes: map[string]string{
 				"/token-profiles/latest/v1": `[{"url":"https://dex/a","chainId":"solana","tokenAddress":"TokA"},
@@ -157,6 +180,26 @@ func TestInformationSourceProxiesFailOnBadAnswers(t *testing.T) {
 		routes   map[string]string
 		newProxy func(baseUrl string) domaininterface.IInformationSourceProxy
 	}{
+		{name: "bybit answering without a return code", routes: map[string]string{"/v5/announcements/index": `{}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewBybitAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
+		{name: "binance contracts answering without a symbol list", routes: map[string]string{"/fapi/v1/exchangeInfo": `{}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewBinancePerpetualContractInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
+		{name: "coingecko answering without a coin list", routes: map[string]string{"/api/v3/search/trending": `{}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewCoinGeckoTrendingInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
+		{name: "binance announcements answering empty", routes: map[string]string{"/bapi/composite/v1/public/cms/article/list/query": `{}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewBinanceAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
+		{name: "okx answering empty", routes: map[string]string{"/api/v5/support/announcements": `{}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewOkxAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
 		{name: "binance refusing", routes: map[string]string{"/bapi/composite/v1/public/cms/article/list/query": `{"code":"100001","data":{"catalogs":[]}}`},
 			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
 				return informationsource.NewBinanceAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)

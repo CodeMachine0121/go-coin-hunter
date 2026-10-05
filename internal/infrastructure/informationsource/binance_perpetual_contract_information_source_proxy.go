@@ -3,6 +3,7 @@ package informationsource
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -40,6 +41,9 @@ func (binancePerpetualContractInformationSourceProxy *BinancePerpetualContractIn
 		binancePerpetualContractInformationSourceProxy.baseUrl+"/fapi/v1/exchangeInfo")
 	if fetchError != nil {
 		return nil, fetchError
+	}
+	if exchangeInformation.Symbols == nil {
+		return nil, fmt.Errorf("binance exchange information answered without a symbol list")
 	}
 
 	contractSymbols := slices.DeleteFunc(slices.Clone(exchangeInformation.Symbols), func(contractSymbol binanceContractSymbolWire) bool {

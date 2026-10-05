@@ -99,8 +99,6 @@ func TestDiscoveryRoutesAnswer(t *testing.T) {
 		underTest.pipelineRunRepository.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
 		underTest.outcomeRepository.EXPECT().CreateAll(gomock.Any(), gomock.Any()).Return(nil)
 		underTest.coinIntelligenceRepository.EXPECT().SaveNew(gomock.Any(), gomock.Any()).Return(nil)
-		underTest.coinIntelligenceRepository.EXPECT().FindPublishedSince(gomock.Any(), gomock.Any()).Return(nil, nil)
-		underTest.coinCandidateRepository.EXPECT().CreateAll(gomock.Any(), gomock.Any()).Return(nil)
 
 		recorder := underTest.request(http.MethodPost, "/coin-discoveries")
 

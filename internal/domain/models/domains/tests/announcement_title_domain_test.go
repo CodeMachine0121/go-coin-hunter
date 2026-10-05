@@ -19,6 +19,8 @@ func TestAnnouncementTitleCoinSymbols(t *testing.T) {
 		{name: "a date in parentheses is not a ticker", title: "Binance Futures Will Launch USDⓈ-Margined CTUSDT Perpetual Contract (2026-10-01)", want: []string{"CT"}},
 		{name: "a year alone in parentheses is not a ticker", title: "Listing roundup (2026)", want: []string{}},
 		{name: "no ticker at all", title: "系統維護通知", want: []string{}},
+		{name: "a one-letter ticker", title: "Binance Will List Sonic (S)", want: []string{"S"}},
+		{name: "a time zone is not a ticker", title: "Trading opens at 08:00 (UTC) for Zora (ZORA)", want: []string{"ZORA"}},
 	}
 
 	for _, testCase := range testCases {

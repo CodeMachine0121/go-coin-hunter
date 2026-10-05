@@ -10,6 +10,7 @@ import (
 const (
 	AllInformationSourcesFailedReason = "所有資訊來源皆失敗"
 	InterruptedByRestartReason        = "被重啟中斷"
+	InformationSourceTimedOutReason   = "連線逾時"
 )
 
 // PipelineRunDomain owns a run's status transitions; each method returns the whole record so a transition is never half-applied.

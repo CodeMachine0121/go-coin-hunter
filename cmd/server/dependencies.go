@@ -18,7 +18,8 @@ import (
 
 // informationSourcesFor is where a new free information source is plugged in: one more line in this list.
 func informationSourcesFor(discoveryConfig config.DiscoveryConfig) []domaininterface.IInformationSourceProxy {
-	httpClient := &http.Client{Timeout: discoveryConfig.SourceRequestTimeout}
+	// No client-wide timeout: each source call runs under the discovery's own per-source deadline.
+	httpClient := &http.Client{}
 
 	return []domaininterface.IInformationSourceProxy{
 		informationsource.NewBinanceAnnouncementInformationSourceProxy(httpClient, discoveryConfig.BinanceWebBaseUrl),

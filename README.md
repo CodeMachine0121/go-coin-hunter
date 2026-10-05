@@ -58,8 +58,6 @@ make mock              # 重新產生 mock
 | `BACKGROUND_JOBS_ENABLED` | `true` | 背景 job 總開關 |
 | `DISCOVERY_WINDOW_HOURS` | `72` | 探索時間窗：只有這段時間內發布的情報才產生候選幣 |
 | `DISCOVERY_EXCLUDED_COIN_SYMBOLS` | `BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD,USDE` | 排除幣種（主流幣、穩定幣），逗號分隔 |
-| `INFORMATION_SOURCE_ITEM_LIMIT` | `50` | 每個資訊來源每輪最多取幾則 |
-| `INFORMATION_SOURCE_TIMEOUT_SECONDS` | `15` | 每個資訊來源的逾時 |
 | `BINANCE_WEB_BASE_URL` / `BINANCE_FUTURES_BASE_URL` / `BYBIT_BASE_URL` / `OKX_BASE_URL` / `COINGECKO_BASE_URL` / `DEXSCREENER_BASE_URL` | 各官方網址 | 資訊來源網址（測試或代理時覆寫） |
 
 ## 資訊來源（全部免費、免金鑰）

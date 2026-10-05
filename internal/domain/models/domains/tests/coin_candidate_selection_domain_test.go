@@ -27,3 +27,16 @@ func TestSelectCandidatesAggregatesPerCoin(t *testing.T) {
 	}}, coinCandidates)
 	assert.Equal(t, startedAt.Add(-72*time.Hour), selection.WindowStart(startedAt))
 }
+
+func TestSelectCandidatesTreatsOneSymbolOnTwoChainsAsOneCoin(t *testing.T) {
+	selection := domains.NewCoinCandidateSelectionDomain(vo.DiscoveryPolicyVo{Window: 72 * time.Hour})
+
+	coinCandidates := selection.SelectCandidates(1, receivedAt, []entities.CoinIntelligence{
+		{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "solana:tok1", CoinSymbol: "PEPE2", PublishedAt: receivedAt},
+		{SourceName: "dexScreenerTokenProfile", ExternalIdentifier: "ethereum:0xtok2", CoinSymbol: "PEPE2", PublishedAt: receivedAt},
+	})
+
+	assert.Len(t, coinCandidates, 1)
+	assert.Equal(t, 1, coinCandidates[0].SourceCount)
+	assert.Equal(t, 2, coinCandidates[0].IntelligenceCount)
+}

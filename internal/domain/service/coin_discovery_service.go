@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -70,6 +71,10 @@ func (coinDiscoveryService *CoinDiscoveryService) DiscoverCoins(
 			informationItems, fetchError := informationSourceProxy.FetchInformationItems(
 				sourceContext, coinDiscoveryService.discoveryPolicy.ItemLimitPerSource)
 			informationSourceResults[index] = vo.InformationSourceResultVo{SourceName: informationSourceProxy.SourceName()}
+			if errors.Is(fetchError, context.DeadlineExceeded) {
+				informationSourceResults[index].FailureReason = domains.InformationSourceTimedOutReason
+				return
+			}
 			if fetchError != nil {
 				informationSourceResults[index].FailureReason = fetchError.Error()
 				return
@@ -92,6 +97,10 @@ func (coinDiscoveryService *CoinDiscoveryService) DiscoverCoins(
 		if saveError := coinDiscoveryService.coinIntelligenceRepository.SaveNew(
 			executionContext, coinIntelligences); saveError != nil {
 			return nil, fmt.Errorf("save coin intelligences: %w", saveError)
+		}
+		// Intelligence left in the window by earlier rounds must not make a round with no answering source look productive.
+		if !informationSourceResultsDomain.AnySourceSucceeded() {
+			return []entities.CoinCandidate{}, nil
 		}
 		windowCoinIntelligences, windowError := coinDiscoveryService.coinIntelligenceRepository.FindPublishedSince(
 			executionContext, coinCandidateSelection.WindowStart(startedAt))

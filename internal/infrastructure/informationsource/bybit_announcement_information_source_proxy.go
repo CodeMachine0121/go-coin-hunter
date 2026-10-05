@@ -33,8 +33,11 @@ func (bybitAnnouncementInformationSourceProxy *BybitAnnouncementInformationSourc
 	if fetchError != nil {
 		return nil, fetchError
 	}
-	if announcementList.ReturnCode != 0 {
-		return nil, fmt.Errorf("bybit announcements answered %d: %s", announcementList.ReturnCode, announcementList.ReturnMessage)
+	if announcementList.ReturnCode == nil {
+		return nil, fmt.Errorf("bybit announcements answered without a return code")
+	}
+	if *announcementList.ReturnCode != 0 {
+		return nil, fmt.Errorf("bybit announcements answered %d: %s", *announcementList.ReturnCode, announcementList.ReturnMessage)
 	}
 
 	informationItems := []vo.InformationItemVo{}

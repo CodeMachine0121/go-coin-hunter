@@ -91,11 +91,16 @@ func newCoinDiscoveryUnderTest(t *testing.T, sourceAnswers []sourceAnswer) *coin
 		}).AnyTimes()
 	underTest.coinIntelligenceRepository.EXPECT().FindPublishedSince(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, publishedSince time.Time) ([]entities.CoinIntelligence, error) {
+			// Behaves like storage: a message about a coin from a source is kept once, the first copy winning.
 			inWindow := []entities.CoinIntelligence{}
+			keptMessages := map[string]bool{}
 			for _, coinIntelligence := range append(underTest.storedCoinIntelligences, underTest.savedCoinIntelligences...) {
-				if !coinIntelligence.PublishedAt.Before(publishedSince) {
-					inWindow = append(inWindow, coinIntelligence)
+				messageKey := coinIntelligence.SourceName + "|" + coinIntelligence.ExternalIdentifier + "|" + coinIntelligence.CoinSymbol
+				if keptMessages[messageKey] || coinIntelligence.PublishedAt.Before(publishedSince) {
+					continue
 				}
+				keptMessages[messageKey] = true
+				inWindow = append(inWindow, coinIntelligence)
 			}
 			return inWindow, nil
 		}).AnyTimes()
@@ -186,6 +191,52 @@ func TestDiscoverCoinsKeepsAnAlreadyStoredMentionInWindow(t *testing.T) {
 	_, discoverError := underTest.coinDiscoveryApplication.DiscoverCoinsManually(context.Background())
 
 	require.NoError(t, discoverError)
+	assert.Equal(t, []string{"CT"}, candidateSymbols(underTest.createdCoinCandidates))
+	assert.Equal(t, 1, underTest.createdCoinCandidates[0].IntelligenceCount)
+}
+
+func TestDiscoverCoinsWithEverySourceFailingKeepsNoCandidatesFromEarlierRounds(t *testing.T) {
+	underTest := newCoinDiscoveryUnderTest(t, sixSources("every", errors.New("連線逾時")))
+	underTest.storedCoinIntelligences = []entities.CoinIntelligence{{
+		SourceName: "binanceAnnouncement", ExternalIdentifier: "a1", CoinSymbol: "CT", PublishedAt: *hoursBeforeStart(5),
+	}}
+
+	pipelineRun, discoverError := underTest.coinDiscoveryApplication.DiscoverCoinsManually(context.Background())
+
+	require.NoError(t, discoverError)
+	assert.Equal(t, string(vo.PipelineRunStatusFailed), pipelineRun.Status)
+	assert.Empty(t, underTest.createdCoinCandidates)
+}
+
+func TestDiscoverCoinsCutsOffASlowSourceWithoutHoldingUpTheOthers(t *testing.T) {
+	controller := gomock.NewController(t)
+	slowSource := mocks.NewMockIInformationSourceProxy(controller)
+	slowSource.EXPECT().SourceName().Return("okxAnnouncement").AnyTimes()
+	slowSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(sourceContext context.Context, _ int) ([]vo.InformationItemVo, error) {
+			<-sourceContext.Done()
+			return nil, sourceContext.Err()
+		})
+	quickSource := mocks.NewMockIInformationSourceProxy(controller)
+	quickSource.EXPECT().SourceName().Return("bybitAnnouncement").AnyTimes()
+	quickSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).Return([]vo.InformationItemVo{
+		announcement("bybitAnnouncement", "b1", "New listing: CTUSDT Perpetual Contract", hoursBeforeStart(1)),
+	}, nil)
+	underTest := newCoinDiscoveryUnderTest(t, nil)
+	clockProxy := mocks.NewMockIClockProxy(controller)
+	clockProxy.EXPECT().Now().Return(discoveryStartedAt).AnyTimes()
+	shortTimeoutPolicy := discoveryPolicy()
+	shortTimeoutPolicy.SourceRequestTimeout = 50 * time.Millisecond
+	coinDiscoveryApplication := application.NewCoinDiscoveryApplication(service.NewCoinDiscoveryService(
+		[]domaininterface.IInformationSourceProxy{slowSource, quickSource}, underTest.pipelineRunRepository, underTest.outcomeRepository,
+		underTest.coinIntelligenceRepository, underTest.coinCandidateRepository, clockProxy, shortTimeoutPolicy))
+
+	pipelineRun, discoverError := coinDiscoveryApplication.DiscoverCoinsManually(context.Background())
+
+	require.NoError(t, discoverError)
+	assert.Equal(t, string(vo.PipelineRunStatusSucceeded), pipelineRun.Status)
+	assert.Equal(t, dto.InformationSourceOutcomeDto{SourceName: "okxAnnouncement", FailureReason: "連線逾時"}, pipelineRun.InformationSourceOutcomes[0])
+	assert.True(t, pipelineRun.InformationSourceOutcomes[1].Succeeded)
 	assert.Equal(t, []string{"CT"}, candidateSymbols(underTest.createdCoinCandidates))
 }
 
@@ -376,10 +427,13 @@ func failingDiscoveryStorage(t *testing.T, failingStep string) (*application.Coi
 	coinCandidateRepository.EXPECT().CreateAll(gomock.Any(), gomock.Any()).Return(stepError("candidates")).AnyTimes()
 	clockProxy := mocks.NewMockIClockProxy(controller)
 	clockProxy.EXPECT().Now().Return(discoveryStartedAt).AnyTimes()
+	answeringSource := mocks.NewMockIInformationSourceProxy(controller)
+	answeringSource.EXPECT().SourceName().Return("binanceAnnouncement").AnyTimes()
+	answeringSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).Return([]vo.InformationItemVo{}, nil)
 
 	return application.NewCoinDiscoveryApplication(service.NewCoinDiscoveryService(
-		nil, pipelineRunRepository, outcomeRepository, coinIntelligenceRepository, coinCandidateRepository,
-		clockProxy, discoveryPolicy())), lastUpdate
+		[]domaininterface.IInformationSourceProxy{answeringSource}, pipelineRunRepository, outcomeRepository,
+		coinIntelligenceRepository, coinCandidateRepository, clockProxy, discoveryPolicy())), lastUpdate
 }
 
 func TestDiscoverCoinsMarksTheRunFailedWhenSavingTheRoundFails(t *testing.T) {

@@ -146,3 +146,19 @@ func TestCoinCandidateRepositoryListsARunsCandidatesBySymbol(t *testing.T) {
 	assert.Equal(t, "CT", coinCandidates[0].CoinSymbol)
 	assert.Equal(t, "PUMP", coinCandidates[1].CoinSymbol)
 }
+
+func TestCoinIntelligenceRepositoryTellsMessagesApartBySourceMessageAndCoin(t *testing.T) {
+	coinIntelligenceRepository := persistence.NewCoinIntelligenceRepository(newMigratedDatabase(t))
+	original := entities.CoinIntelligence{PipelineRunID: 1, SourceName: "binanceAnnouncement", ExternalIdentifier: "a1", CoinSymbol: "ZORA", PublishedAt: storedAt}
+	sameMessageOtherCoin := original
+	sameMessageOtherCoin.CoinSymbol = "PUMP"
+	sameIdentifierOtherSource := original
+	sameIdentifierOtherSource.SourceName = "bybitAnnouncement"
+
+	require.NoError(t, coinIntelligenceRepository.SaveNew(context.Background(),
+		[]entities.CoinIntelligence{original, sameMessageOtherCoin, sameIdentifierOtherSource}))
+
+	saved, findError := coinIntelligenceRepository.FindByPipelineRunID(context.Background(), 1)
+	require.NoError(t, findError)
+	assert.Len(t, saved, 3)
+}

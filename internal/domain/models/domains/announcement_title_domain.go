@@ -6,11 +6,16 @@ import (
 	"strings"
 )
 
-// Tickers are 2-15 upper-case letters or digits; "(CT)" names a coin, "CTUSDT" names its USDT market.
+// Tickers are 1-15 upper-case letters or digits; "(CT)" names a coin, "CTUSDT" names its USDT market.
 var (
-	parenthesizedCoinSymbolPattern = regexp.MustCompile(`\(([A-Z0-9]{2,15})\)`)
-	usdtMarketCoinSymbolPattern    = regexp.MustCompile(`\b([A-Z0-9]{2,15})USDT\b`)
+	parenthesizedCoinSymbolPattern = regexp.MustCompile(`\(([A-Z0-9]{1,15})\)`)
+	usdtMarketCoinSymbolPattern    = regexp.MustCompile(`\b([A-Z0-9]{1,15})USDT\b`)
 )
+
+// nonTickerWords are upper-case words announcements put in parentheses that never name a coin.
+var nonTickerWords = map[string]bool{
+	"UTC": true, "GMT": true, "USD": true, "AM": true, "PM": true, "FAQ": true, "KYC": true, "API": true,
+}
 
 // AnnouncementTitleDomain reads which coins an exchange announcement title names.
 type AnnouncementTitleDomain struct {
@@ -47,7 +52,7 @@ func (announcementTitleDomain AnnouncementTitleDomain) CoinSymbols() []string {
 	for _, positioned := range positionedCoinSymbols {
 		coinSymbol := strings.ToUpper(positioned.coinSymbol)
 		// "(2026)" is a year in a title, not a ticker.
-		if seenCoinSymbols[coinSymbol] || strings.Trim(coinSymbol, "0123456789") == "" {
+		if seenCoinSymbols[coinSymbol] || nonTickerWords[coinSymbol] || strings.Trim(coinSymbol, "0123456789") == "" {
 			continue
 		}
 		seenCoinSymbols[coinSymbol] = true

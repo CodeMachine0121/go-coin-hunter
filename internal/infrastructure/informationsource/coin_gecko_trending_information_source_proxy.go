@@ -2,6 +2,7 @@ package informationsource
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
@@ -29,6 +30,9 @@ func (coinGeckoTrendingInformationSourceProxy *CoinGeckoTrendingInformationSourc
 		coinGeckoTrendingInformationSourceProxy.baseUrl+"/api/v3/search/trending")
 	if fetchError != nil {
 		return nil, fetchError
+	}
+	if trending.Coins == nil {
+		return nil, fmt.Errorf("coingecko trending answered without a coin list")
 	}
 
 	informationItems := []vo.InformationItemVo{}

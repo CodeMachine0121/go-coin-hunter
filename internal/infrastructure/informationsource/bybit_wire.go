@@ -1,7 +1,8 @@
 package informationsource
 
 type bybitAnnouncementListWire struct {
-	ReturnCode    int    `json:"retCode"`
+	// ReturnCode is a pointer so an answer without it is told apart from success (0).
+	ReturnCode    *int   `json:"retCode"`
 	ReturnMessage string `json:"retMsg"`
 	Result        struct {
 		List []struct {

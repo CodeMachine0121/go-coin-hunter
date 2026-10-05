@@ -1,0 +1,22 @@
+# Binaries
+bin/
+*.exe
+*.test
+
+# Environment
+.env
+
+# Local database
+data/
+
+# Coverage
+*.out
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

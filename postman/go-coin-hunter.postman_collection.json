@@ -34,6 +34,13 @@
       }
     },
     {
+      "name": "Run a whole hunt round (manual)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/hunt-rounds"
+      }
+    },
+    {
       "name": "Discovery",
       "item": [
         {

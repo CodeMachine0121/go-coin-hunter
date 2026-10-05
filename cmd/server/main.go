@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/config"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/persistence"
@@ -16,8 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
-
-const shutdownGracePeriod = 30 * time.Second
 
 func main() {
 	if loadError := godotenv.Load(); loadError != nil {
@@ -48,10 +45,14 @@ func main() {
 	defer stopListeningForSignals()
 
 	engine := gin.Default()
-	registerRoutes(engine, builtApplications)
+	registerRoutes(engine, builtApplications, shutdownSignalled.Done())
 
+	// Jobs get their own context: on shutdown they are first asked to stop at a step boundary, and only abandoned if the
+	// grace period runs out.
+	jobsContext, abandonJobs := context.WithCancel(context.Background())
+	defer abandonJobs()
 	backgroundJobManager := job.NewBackgroundJobManager(backgroundJobsFor(applicationConfig, builtApplications))
-	backgroundJobManager.StartAll(shutdownSignalled)
+	backgroundJobManager.StartAll(jobsContext)
 
 	server := &http.Server{Addr: applicationConfig.ServerAddress, Handler: engine}
 	go func() {
@@ -61,14 +62,5 @@ func main() {
 	}()
 
 	<-shutdownSignalled.Done()
-	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), shutdownGracePeriod)
-	defer cancelShutdown()
-
-	backgroundJobManager.StopAll()
-	if shutdownError := server.Shutdown(shutdownContext); shutdownError != nil {
-		log.Printf("failed to shut down http server cleanly: %v", shutdownError)
-	}
-	if !backgroundJobManager.WaitAll(shutdownContext) {
-		log.Println("background jobs did not finish within the grace period")
-	}
+	shutDown(server, backgroundJobManager, applicationConfig.ShutdownGracePeriod, abandonJobs)
 }

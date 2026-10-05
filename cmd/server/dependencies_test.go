@@ -8,6 +8,7 @@ import (
 	"github.com/CodeMachine0121/go-coin-hunter/internal/config"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/analysis"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/job"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -57,4 +58,30 @@ func TestInsightShowsIntelligenceFromTheDiscoveryWindow(t *testing.T) {
 	assert.Equal(t, 15*time.Second, coinInsightPolicy.SourceRequestTimeout)
 	assert.Equal(t, 20, coinInsightPolicy.MaximumCoinsPerRound)
 	assert.Equal(t, 3, coinInsightPolicy.MaximumConcurrentAnalyses)
+}
+
+func TestTheHuntRoundIsScheduledOnlyWhenSwitchedOn(t *testing.T) {
+	testCases := []struct {
+		name                  string
+		backgroundJobsEnabled bool
+		interval              time.Duration
+		wantJobs              int
+	}{
+		{name: "on with an interval", backgroundJobsEnabled: true, interval: 4 * time.Hour, wantJobs: 1},
+		{name: "a zero interval", backgroundJobsEnabled: true, interval: 0, wantJobs: 0},
+		{name: "a negative interval", backgroundJobsEnabled: true, interval: -time.Hour, wantJobs: 0},
+		{name: "background jobs switched off", backgroundJobsEnabled: false, interval: 4 * time.Hour, wantJobs: 0},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			backgroundJobs := backgroundJobsFor(config.ApplicationConfig{BackgroundJobsEnabled: testCase.backgroundJobsEnabled,
+				HuntPipelineInterval: testCase.interval}, applications{})
+
+			assert.Len(t, backgroundJobs, testCase.wantJobs)
+			if testCase.wantJobs == 1 {
+				assert.IsType(t, &job.HuntPipelineJob{}, backgroundJobs[0])
+			}
+		})
+	}
 }

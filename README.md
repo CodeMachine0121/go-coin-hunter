@@ -56,6 +56,8 @@ make mock              # 重新產生 mock
 | `POSTGRES_SSL_MODE` | `disable` | SSL 模式 |
 | `TEST_POSTGRES_DSN` | 空（儲存層測試跳過） | 測試用資料庫連線字串，資料庫名稱**必須**以 `_test` 結尾（測試會清空資料表） |
 | `BACKGROUND_JOBS_ENABLED` | `true` | 背景 job 總開關 |
+| `HUNT_PIPELINE_INTERVAL_HOURS` | `4` | 獵捕回合排程間隔（小時）；`0` 或負值停用排程。啟動即跑第一輪 |
+| `SHUTDOWN_GRACE_MINUTES` | `15` | 關閉時等待進行中步驟的寬限（分鐘）；逾時即放棄，該輪次於下次啟動標為被重啟中斷 |
 | `DISCOVERY_WINDOW_HOURS` | `72` | 探索時間窗：只有這段時間內發布的情報才產生候選幣 |
 | `DISCOVERY_EXCLUDED_COIN_SYMBOLS` | `BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD,USDE` | 排除幣種（主流幣、穩定幣），逗號分隔 |
 | `BINANCE_WEB_BASE_URL` / `BINANCE_FUTURES_BASE_URL` / `BYBIT_BASE_URL` / `OKX_BASE_URL` / `COINGECKO_BASE_URL` / `DEXSCREENER_BASE_URL` | 各官方網址 | 資訊來源網址（測試或代理時覆寫） |
@@ -113,6 +115,10 @@ make mock              # 重新產生 mock
 數字一律由 domain 決定：槓桿 1–5、部位 ≤ 10%、停損 1–50%、停利 1–200%（以最新價格換算成價格、方向正確）；查不到最新價格的做多 / 做空改判觀望。
 **獵捕結果表**每輪成功裁決以一筆交易改寫：本輪有的幣覆蓋、沒有的移除；失敗的裁決不動它。系統不下單。
 
+## 排程
+
+背景 job 每 `HUNT_PIPELINE_INTERVAL_HOURS` 小時跑一輪獵捕回合（啟動即跑第一輪），四個步驟依序執行，**任一步未成功就停**，獵捕結果表因此只反映最近一次完整成功的回合。排程與手動共用「同時只會有一輪」；關閉服務時不再開始下一步，正在進行的步驟最多等 `SHUTDOWN_GRACE_MINUTES`（預設 15 分鐘）。每輪結果（含手動）寫入服務日誌。
+
 ## API Routes
 
 - `GET /health`
@@ -127,6 +133,7 @@ make mock              # 重新產生 mock
 - `POST /hunt-verdicts` — 手動觸發一輪 CIO 裁決並改寫獵捕結果表；從未有成功洞察時回 409「尚無成功的洞察輪次」
 - `GET /hunt-board` — **獵捕結果表**（依信心由高到低）：`id`、`coinSymbol`、`calculatedAt`＋操作、信心、槓桿、部位、停損停利價、理由、矛盾取捨
 - `GET /pipeline-runs/:pipelineRunId/coin-verdicts` — 某一輪裁決的全部裁決
+- `POST /hunt-rounds` — **手動一鍵跑完整一輪**（探索 → 過濾 → 洞察 → 裁決），回傳每一步的輪次、是否完成、停在哪一步與原因；已有回合進行中時回 409「已有獵捕回合進行中」
 - `GET /pipeline-runs` — 管線輪次歷史，新到舊，含各來源結果
 - `GET /pipeline-runs/:pipelineRunId/coin-intelligences` — 某一輪首次保存的情報（非正整數 400、查無輪次 404）
 

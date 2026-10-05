@@ -19,6 +19,11 @@ type ApplicationConfig struct {
 	Filtering             FilteringConfig
 	Insight               InsightConfig
 	Verdict               VerdictConfig
+	// HuntPipelineInterval is how often the scheduled hunt round runs; zero or less switches the schedule off.
+	HuntPipelineInterval time.Duration
+	// ShutdownGracePeriod is how long shutdown waits for the step in flight before abandoning it; an abandoned step's
+	// run is marked interrupted at the next start.
+	ShutdownGracePeriod time.Duration
 }
 
 // VerdictConfig holds the chief investment officer's model settings; the API key is shared with the insight step.
@@ -157,6 +162,8 @@ func Load() ApplicationConfig {
 			NewsLookback:                 72 * time.Hour,
 			MaterialSourceTimeout:        15 * time.Second,
 		},
+		HuntPipelineInterval: time.Duration(parseIntWithDefault(os.Getenv("HUNT_PIPELINE_INTERVAL_HOURS"), 4)) * time.Hour,
+		ShutdownGracePeriod:  time.Duration(parsePositiveIntWithDefault(os.Getenv("SHUTDOWN_GRACE_MINUTES"), 15)) * time.Minute,
 		Verdict: VerdictConfig{
 			Model:               cmp.Or(os.Getenv("VERDICT_MODEL"), "claude-opus-5-5"),
 			Effort:              cmp.Or(os.Getenv("VERDICT_EFFORT"), "high"),
@@ -182,6 +189,16 @@ func Load() ApplicationConfig {
 
 func parseBoolWithDefault(rawValue string, defaultValue bool) bool {
 	parsedValue, parseError := strconv.ParseBool(rawValue)
+	if parseError != nil {
+		return defaultValue
+	}
+
+	return parsedValue
+}
+
+// parseIntWithDefault falls back only on a typo or an empty value; zero and negatives are kept, as switches.
+func parseIntWithDefault(rawValue string, defaultValue int) int {
+	parsedValue, parseError := strconv.Atoi(strings.TrimSpace(rawValue))
 	if parseError != nil {
 		return defaultValue
 	}

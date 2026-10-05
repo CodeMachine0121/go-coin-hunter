@@ -6,9 +6,6 @@ bin/
 # Environment
 .env
 
-# Local database
-data/
-
 # Coverage
 *.out
 

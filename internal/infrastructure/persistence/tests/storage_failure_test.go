@@ -2,8 +2,6 @@ package persistence_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -60,17 +58,8 @@ func TestEmptyBatchesNeverTouchStorage(t *testing.T) {
 	assert.NoError(t, persistence.NewCoinCandidateRepository(database).CreateAll(context.Background(), nil))
 }
 
-func TestNewDatabaseFailsWhenItsFolderCannotBeCreated(t *testing.T) {
-	blockingFile := filepath.Join(t.TempDir(), "not-a-folder")
-	require.NoError(t, os.WriteFile(blockingFile, []byte{}, 0o600))
-
-	_, openError := persistence.NewDatabase(filepath.Join(blockingFile, "go-coin-hunter.sqlite3"))
-
-	assert.Error(t, openError)
-}
-
-func TestNewDatabaseFailsWhenThePathIsAFolder(t *testing.T) {
-	_, openError := persistence.NewDatabase(t.TempDir())
+func TestNewDatabaseFailsWhenTheServerIsUnreachable(t *testing.T) {
+	_, openError := persistence.NewDatabase("host=127.0.0.1 port=1 user=postgres password=postgres dbname=none_test sslmode=disable connect_timeout=2")
 
 	assert.Error(t, openError)
 }

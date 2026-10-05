@@ -26,7 +26,7 @@ func main() {
 
 	applicationConfig := config.Load()
 
-	database, databaseError := persistence.NewDatabase(applicationConfig.SqliteDatabasePath)
+	database, databaseError := persistence.NewDatabase(applicationConfig.Database.DataSourceName())
 	if databaseError != nil {
 		log.Fatalf("failed to initialize database: %v", databaseError)
 	}

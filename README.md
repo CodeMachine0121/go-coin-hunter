@@ -25,7 +25,7 @@
 | :--- | :--- |
 | 語言 | Go 1.26 |
 | Web 框架 | Gin |
-| ORM / DB | GORM + SQLite（`glebarez/sqlite`，純 Go、無 CGO），Code First、`AutoMigrate` |
+| ORM / DB | GORM + PostgreSQL，Code First、啟動時 `AutoMigrate` |
 | AI | Anthropic Claude（`anthropic-sdk-go`） |
 | 金額 | `shopspring/decimal` |
 | 測試 | `testing` + `testify` + `go.uber.org/mock`（`go tool mockgen`） |
@@ -35,9 +35,13 @@
 
 ```
 cp .env.example .env   # 所有變數皆有預設值，可省略
+# 需要一個 PostgreSQL（預設 localhost:5432、postgres/postgres、資料庫 go_coin_hunter），例如：
+#   docker run -d --name postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+#   docker exec postgres psql -U postgres -c 'CREATE DATABASE go_coin_hunter' -c 'CREATE DATABASE go_coin_hunter_test'
 go mod download
 make start             # curl localhost:8080/health → {"status":"Healthy"}
-make test              # go test ./... -race
+make test              # go test ./... -race（未設 TEST_POSTGRES_DSN 時儲存層測試會跳過）
+TEST_POSTGRES_DSN="host=localhost port=5432 user=postgres password=postgres dbname=go_coin_hunter_test sslmode=disable" make test-storage
 make mock              # 重新產生 mock
 ```
 
@@ -46,7 +50,11 @@ make mock              # 重新產生 mock
 | 變數 | 預設值 | 用途 |
 | :--- | :--- | :--- |
 | `SERVER_ADDRESS` | `:8080` | HTTP 監聽位址 |
-| `SQLITE_DB_PATH` | `./data/go-coin-hunter.sqlite3` | SQLite 檔案路徑 |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | `localhost` / `5432` | PostgreSQL 位址 |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | `postgres` / `postgres` | PostgreSQL 帳密 |
+| `POSTGRES_DATABASE` | `go_coin_hunter` | 資料庫名稱 |
+| `POSTGRES_SSL_MODE` | `disable` | SSL 模式 |
+| `TEST_POSTGRES_DSN` | 空（儲存層測試跳過） | 測試用資料庫連線字串，資料庫名稱**必須**以 `_test` 結尾（測試會清空資料表） |
 | `BACKGROUND_JOBS_ENABLED` | `true` | 背景 job 總開關 |
 | `DISCOVERY_WINDOW_HOURS` | `72` | 探索時間窗：只有這段時間內發布的情報才產生候選幣 |
 | `DISCOVERY_EXCLUDED_COIN_SYMBOLS` | `BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD,USDE` | 排除幣種（主流幣、穩定幣），逗號分隔 |

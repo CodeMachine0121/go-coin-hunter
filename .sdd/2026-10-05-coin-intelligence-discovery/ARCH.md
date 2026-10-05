@@ -2,7 +2,7 @@
 
 **Status:** Confirmed（使用者授權一律採 best practice）
 **Source PRD:** `.sdd/2026-10-05-coin-intelligence-discovery/PRD.md`
-**Tech context:** Go · Gin · GORM + SQLite · Clean / Onion Architecture（依賴指向 domain；entity 乾淨、行為住 `domains/`；外部資源一律 `Proxy`）
+**Tech context:** Go · Gin · GORM + PostgreSQL · Clean / Onion Architecture（依賴指向 domain；entity 乾淨、行為住 `domains/`；外部資源一律 `Proxy`）
 
 ---
 
@@ -98,7 +98,7 @@ type IInformationSourceProxy interface {
 | Component | Current role | Change needed |
 | :--- | :--- | :--- |
 | `SchemaMigrator.Migrate` | 空的 AutoMigrate | 加入 4 個 entity |
-| `config.ApplicationConfig` | server / sqlite / job 開關 | 加 `Discovery DiscoveryConfig` |
+| `config.ApplicationConfig` | server / database / job 開關 | 加 `Discovery DiscoveryConfig` |
 | `registerRoutes` | 只有 `/health` | 組裝 `[]IInformationSourceProxy`、repositories、services、controllers |
 | `main` | 開 DB、起 server | migrate 後呼叫 `FailInterruptedPipelineRuns`（失敗只記 log） |
 
@@ -128,7 +128,7 @@ flowchart TD
 - **How to add it:** 實作 `IInformationSourceProxy`（只做正規化）→ 在 `registerRoutes` 的 list 加一行。代號辨識不夠用時擴充 `AnnouncementTitleDomain`，不要在 Proxy 內自己猜。
 - **Patterns applied & why:** 介面 list 注入（Composite-ish fan-out）— 來源是最常變動的軸；Domain Model 收攏規則 — 規則與來源正交。
 - **Do not hardcode:** 時間窗、排除名單、每來源上限、逾時、各來源網址（全部進 `DiscoveryConfig`）。
-- **Known debt / deferred:** 情報不清除（量小，SQLite 足夠）；來源不重試（下一輪自然再試）。
+- **Known debt / deferred:** 情報不清除（量小，PostgreSQL 足夠）；來源不重試（下一輪自然再試）。
 
 ---
 

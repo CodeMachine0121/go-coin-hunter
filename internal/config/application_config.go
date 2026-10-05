@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -10,9 +11,30 @@ import (
 
 type ApplicationConfig struct {
 	ServerAddress         string
-	SqliteDatabasePath    string
+	Database              DatabaseConfig
 	BackgroundJobsEnabled bool
 	Discovery             DiscoveryConfig
+}
+
+type DatabaseConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	Database string
+	SslMode  string
+}
+
+func (databaseConfig DatabaseConfig) DataSourceName() string {
+	return fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		databaseConfig.Host,
+		databaseConfig.Port,
+		databaseConfig.User,
+		databaseConfig.Password,
+		databaseConfig.Database,
+		databaseConfig.SslMode,
+	)
 }
 
 // DiscoveryConfig holds the discovery rules and where each free information source lives.
@@ -35,8 +57,15 @@ const defaultExcludedCoinSymbols = "BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD
 // Load reads the process environment once at startup; every setting has a default so an empty .env still boots.
 func Load() ApplicationConfig {
 	return ApplicationConfig{
-		ServerAddress:         cmp.Or(os.Getenv("SERVER_ADDRESS"), ":8080"),
-		SqliteDatabasePath:    cmp.Or(os.Getenv("SQLITE_DB_PATH"), "./data/go-coin-hunter.sqlite3"),
+		ServerAddress: cmp.Or(os.Getenv("SERVER_ADDRESS"), ":8080"),
+		Database: DatabaseConfig{
+			Host:     cmp.Or(os.Getenv("POSTGRES_HOST"), "localhost"),
+			Port:     cmp.Or(os.Getenv("POSTGRES_PORT"), "5432"),
+			User:     cmp.Or(os.Getenv("POSTGRES_USER"), "postgres"),
+			Password: cmp.Or(os.Getenv("POSTGRES_PASSWORD"), "postgres"),
+			Database: cmp.Or(os.Getenv("POSTGRES_DATABASE"), "go_coin_hunter"),
+			SslMode:  cmp.Or(os.Getenv("POSTGRES_SSL_MODE"), "disable"),
+		},
 		BackgroundJobsEnabled: parseBoolWithDefault(os.Getenv("BACKGROUND_JOBS_ENABLED"), true),
 		Discovery: DiscoveryConfig{
 			Window:               time.Duration(parsePositiveIntWithDefault(os.Getenv("DISCOVERY_WINDOW_HOURS"), 72)) * time.Hour,

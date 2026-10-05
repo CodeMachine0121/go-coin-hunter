@@ -9,7 +9,8 @@ import (
 )
 
 func TestLoadFallsBackToDefaults(t *testing.T) {
-	for _, name := range []string{"SERVER_ADDRESS", "SQLITE_DB_PATH", "BACKGROUND_JOBS_ENABLED", "DISCOVERY_WINDOW_HOURS",
+	for _, name := range []string{"SERVER_ADDRESS", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD",
+		"POSTGRES_DATABASE", "POSTGRES_SSL_MODE", "BACKGROUND_JOBS_ENABLED", "DISCOVERY_WINDOW_HOURS",
 		"DISCOVERY_EXCLUDED_COIN_SYMBOLS", "INFORMATION_SOURCE_ITEM_LIMIT", "INFORMATION_SOURCE_TIMEOUT_SECONDS"} {
 		t.Setenv(name, "")
 	}
@@ -17,6 +18,8 @@ func TestLoadFallsBackToDefaults(t *testing.T) {
 	applicationConfig := config.Load()
 
 	assert.Equal(t, ":8080", applicationConfig.ServerAddress)
+	assert.Equal(t, "host=localhost port=5432 user=postgres password=postgres dbname=go_coin_hunter sslmode=disable",
+		applicationConfig.Database.DataSourceName())
 	assert.True(t, applicationConfig.BackgroundJobsEnabled)
 	assert.Equal(t, 72*time.Hour, applicationConfig.Discovery.Window)
 	assert.Equal(t, []string{"BTC", "ETH", "BNB", "SOL", "XRP", "USDT", "USDC", "FDUSD", "DAI", "TUSD", "USDE"}, applicationConfig.Discovery.ExcludedCoinSymbols)

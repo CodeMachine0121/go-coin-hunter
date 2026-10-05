@@ -13,7 +13,8 @@
 
 | Domain Term | Technical Name | User-Facing Label | Definition & Business Rules | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| 獵捕管線 | *(尚未實作)* | 獵捕管線 | 探索 → 過濾 → 洞察 → 裁決 的完整一輪 | Confirmed |
+| 獵捕管線 | `HuntPipelineApplication` | 獵捕管線 | 探索 → 過濾 → 洞察 → 裁決 四個步驟 | Confirmed |
+| 獵捕回合 | `HuntRoundDto` | 回合 | 依序執行四個步驟的一輪；任一步未成功即停在該步；由排程（每 4 小時）或手動一鍵觸發 | Confirmed |
 | 管線輪次 | `PipelineRun` | 輪次 | 管線**某一個步驟**的一次執行紀錄。狀態：執行中 → 成功 / 失敗 / 無資料；記錄觸發來源與失敗原因 | Confirmed |
 | 管線步驟 | `PipelineRunStepVo` | 步驟 | 管線輪次屬於哪一步：**探索**、**過濾**、**洞察**、**裁決** | Confirmed |
 | 觸發來源 | `PipelineRunTriggerSourceVo` | 觸發 | 輪次由**排程**還是**手動**發動 | Confirmed |
@@ -60,4 +61,5 @@
 | 過濾 | `CoinFilteringService.FilterCoinCandidates` | 對最新成功探索的全部候選幣逐條套用過濾規則，保存過濾結果 | Confirmed |
 | 洞察分析 | `CoinInsightService.AnalyzeCoinCandidates` | 對最新成功過濾保留的候選幣逐枚請 AI 產生洞察 | Confirmed |
 | 獵捕裁決 | *(尚未實作)* | 對最新成功洞察整輪問 CIO 一次，產出裁決並改寫獵捕結果表 | Confirmed |
+| 執行獵捕回合 | `HuntPipelineApplication.RunHuntRound` | 依序跑四個步驟並在第一個未成功的步驟停止 | Confirmed |
 | 中斷收尾 | `PipelineRunService.FailInterruptedPipelineRuns` | 服務啟動時，把殘留「執行中」的輪次改為「失敗（被重啟中斷）」 | Confirmed |

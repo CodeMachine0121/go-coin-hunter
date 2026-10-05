@@ -26,7 +26,7 @@ func main() {
 
 	applicationConfig := config.Load()
 
-	database, databaseError := persistence.NewDatabase(applicationConfig.SqliteDatabasePath)
+	database, databaseError := persistence.NewDatabase(applicationConfig.Database.DataSourceName())
 	if databaseError != nil {
 		log.Fatalf("failed to initialize database: %v", databaseError)
 	}
@@ -34,14 +34,23 @@ func main() {
 		log.Fatalf("failed to migrate schema: %v", migrateError)
 	}
 
+	builtApplications := applicationsFor(database, applicationConfig)
+	// Nothing can be running yet, so any run still marked running was cut short by the last shutdown.
+	interruptedCount, sweepError := builtApplications.pipelineRun.FailInterruptedPipelineRuns(context.Background())
+	if sweepError != nil {
+		log.Printf("failed to clear pipeline runs interrupted by restart: %v", sweepError)
+	} else if interruptedCount > 0 {
+		log.Printf("marked %d pipeline run(s) interrupted by restart as failed", interruptedCount)
+	}
+
 	shutdownSignalled, stopListeningForSignals := signal.NotifyContext(
 		context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopListeningForSignals()
 
 	engine := gin.Default()
-	registerRoutes(engine, database, applicationConfig)
+	registerRoutes(engine, builtApplications)
 
-	backgroundJobManager := job.NewBackgroundJobManager(backgroundJobsFor(database, applicationConfig))
+	backgroundJobManager := job.NewBackgroundJobManager(backgroundJobsFor(applicationConfig, builtApplications))
 	backgroundJobManager.StartAll(shutdownSignalled)
 
 	server := &http.Server{Addr: applicationConfig.ServerAddress, Handler: engine}

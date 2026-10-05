@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -15,13 +14,9 @@ import (
 // slowQueryThreshold matches GORM's default; the custom logger exists only for the not-found flag.
 const slowQueryThreshold = 200 * time.Millisecond
 
-// NewDatabase opens the SQLite file, creating its folder first, and keeps "record not found" out of the log because empty reads are expected answers here.
-func NewDatabase(databasePath string) (*gorm.DB, error) {
-	if mkdirError := os.MkdirAll(filepath.Dir(databasePath), 0o755); mkdirError != nil {
-		return nil, fmt.Errorf("create sqlite folder: %w", mkdirError)
-	}
-
-	database, openError := gorm.Open(sqlite.Open(databasePath), &gorm.Config{
+// NewDatabase opens the PostgreSQL connection without touching the schema, and keeps "record not found" out of the log because empty reads are expected answers here.
+func NewDatabase(dataSourceName string) (*gorm.DB, error) {
+	database, openError := gorm.Open(postgres.Open(dataSourceName), &gorm.Config{
 		Logger: logger.New(
 			log.New(os.Stdout, "\r\n", log.LstdFlags),
 			logger.Config{
@@ -33,7 +28,7 @@ func NewDatabase(databasePath string) (*gorm.DB, error) {
 		),
 	})
 	if openError != nil {
-		return nil, fmt.Errorf("open sqlite database: %w", openError)
+		return nil, fmt.Errorf("open postgres connection: %w", openError)
 	}
 
 	return database, nil

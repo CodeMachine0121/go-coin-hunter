@@ -1,0 +1,53 @@
+# Storage tests talk to a real PostgreSQL and skip themselves when TEST_POSTGRES_DSN is
+# unset, so this workflow attaches one and fails if they skip: a skipped guard reads
+# exactly like a passing one.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: go_coin_hunter_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d go_coin_hunter_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      TEST_POSTGRES_DSN: >-
+        host=localhost port=5432 user=postgres password=testpass
+        dbname=go_coin_hunter_test sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: test -z "$(gofmt -l .)"
+      # One package at a time: the storage tests share one database and empty it per test.
+      - run: go test ./... -race -count=1 -p 1 -v 2>&1 | tee test.log
+      - name: Fail when storage tests skipped
+        run: "! grep -q 'TEST_POSTGRES_DSN is not set' test.log"

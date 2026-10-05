@@ -1,0 +1,75 @@
+{
+  "info": {
+    "name": "go-coin-hunter",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "pipelineRunId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Discovery",
+      "item": [
+        {
+          "name": "Discover coins (manual)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/coin-discoveries"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const run = pm.response.json();",
+                  "if (run.id) { pm.collectionVariables.set('pipelineRunId', run.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Latest coin candidates",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/coin-candidates/latest"
+          }
+        },
+        {
+          "name": "Coin intelligences of a run",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/pipeline-runs/{{pipelineRunId}}/coin-intelligences"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pipeline runs",
+      "item": [
+        {
+          "name": "Pipeline run history",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/pipeline-runs"
+          }
+        }
+      ]
+    }
+  ]
+}

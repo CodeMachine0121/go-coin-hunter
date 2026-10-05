@@ -34,6 +34,12 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+    # An explicit bash runs every step with -eo pipefail; the default shell has no pipefail, so a failing go test piped
+    # into tee would still pass.
+    defaults:
+      run:
+        shell: bash
+
     env:
       TEST_POSTGRES_DSN: >-
         host=localhost port=5432 user=postgres password=testpass

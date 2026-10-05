@@ -15,6 +15,10 @@
     {
       "key": "filteringRunId",
       "value": "1"
+    },
+    {
+      "key": "insightRunId",
+      "value": "1"
     }
   ],
   "item": [
@@ -97,6 +101,44 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/pipeline-runs/{{filteringRunId}}/coin-filter-results"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Insight",
+      "item": [
+        {
+          "name": "Analyze coin candidates (manual)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/coin-insights"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const run = pm.response.json();",
+                  "if (run.id) { pm.collectionVariables.set('insightRunId', run.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Latest coin insights",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/coin-insights/latest"
+          }
+        },
+        {
+          "name": "Coin insights of a run",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/pipeline-runs/{{insightRunId}}/coin-insights"
           }
         }
       ]

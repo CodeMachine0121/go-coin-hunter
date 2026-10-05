@@ -59,6 +59,23 @@ func TestLoadReadsFilteringThresholds(t *testing.T) {
 	assert.Equal(t, 2*time.Second, filteringConfig.TokenSecurityRequestInterval)
 }
 
+func TestLoadReadsInsightSettings(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("INSIGHT_MODEL", "")
+	t.Setenv("INSIGHT_EFFORT", "medium")
+	t.Setenv("INSIGHT_MAX_COINS_PER_ROUND", "0")
+
+	insightConfig := config.Load().Insight
+
+	assert.Equal(t, "test-key", insightConfig.AnthropicApiKey)
+	assert.Equal(t, "claude-opus-5-5", insightConfig.Model)
+	assert.Equal(t, "medium", insightConfig.Effort)
+	assert.Equal(t, 120*time.Second, insightConfig.AnalysisTimeout)
+	assert.Equal(t, 3, insightConfig.MaximumConcurrentAnalyses)
+	assert.Equal(t, 20, insightConfig.MaximumCoinsPerRound)
+	assert.Equal(t, "https://news.google.com", insightConfig.GoogleNewsBaseUrl)
+}
+
 func TestLoadIgnoresANonPositiveWindow(t *testing.T) {
 	t.Setenv("DISCOVERY_WINDOW_HOURS", "-3")
 

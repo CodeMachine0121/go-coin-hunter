@@ -48,9 +48,31 @@ make mock              # 重新產生 mock
 | `SERVER_ADDRESS` | `:8080` | HTTP 監聽位址 |
 | `SQLITE_DB_PATH` | `./data/go-coin-hunter.sqlite3` | SQLite 檔案路徑 |
 | `BACKGROUND_JOBS_ENABLED` | `true` | 背景 job 總開關 |
+| `DISCOVERY_WINDOW_HOURS` | `72` | 探索時間窗：只有這段時間內發布的情報才產生候選幣 |
+| `DISCOVERY_EXCLUDED_COIN_SYMBOLS` | `BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD,USDE` | 排除幣種（主流幣、穩定幣），逗號分隔 |
+| `INFORMATION_SOURCE_ITEM_LIMIT` | `50` | 每個資訊來源每輪最多取幾則 |
+| `INFORMATION_SOURCE_TIMEOUT_SECONDS` | `15` | 每個資訊來源的逾時 |
+| `BINANCE_WEB_BASE_URL` / `BINANCE_FUTURES_BASE_URL` / `BYBIT_BASE_URL` / `OKX_BASE_URL` / `COINGECKO_BASE_URL` / `DEXSCREENER_BASE_URL` | 各官方網址 | 資訊來源網址（測試或代理時覆寫） |
+
+## 資訊來源（全部免費、免金鑰）
+
+| 來源 | 內容 |
+| :--- | :--- |
+| 幣安上幣公告 | New Cryptocurrency Listing 公告，從標題辨識代號 |
+| 幣安永續合約 | 最新上架的永續合約；股票等傳統金融合約標為非新幣 |
+| Bybit 上幣公告 | New Listings 公告 |
+| OKX 上幣公告 | New Listings 公告 |
+| CoinGecko 熱門 | 熱門幣排行（無發布時間，以首次收到時間為準） |
+| DEX Screener | 最新 token profile，再查代號與最早交易對建立時間 |
+
+新增來源：實作 `IInformationSourceProxy`（`internal/domain/interface/i_information_source_proxy.go`），在 `cmd/server/dependencies.go` 的 `informationSourcesFor` 多加一行即可。
 
 ## API Routes
 
 - `GET /health`
+- `POST /coin-discoveries` — 手動觸發一輪探索，回傳該輪輪次（含各來源成敗）
+- `GET /coin-candidates/latest` — 最新一輪**成功**探索的候選幣（從未成功過為空陣列）
+- `GET /pipeline-runs` — 管線輪次歷史，新到舊，含各來源結果
+- `GET /pipeline-runs/:pipelineRunId/coin-intelligences` — 某一輪首次保存的情報（非正整數 400、查無輪次 404）
 
 Postman 測試集在 `postman/`，新增 / 修改路由需同步更新。

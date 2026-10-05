@@ -42,7 +42,7 @@ func newInsightRoutesUnderTest(t *testing.T) insightRoutesUnderTest {
 	policy := vo.CoinInsightPolicyVo{MaximumCoinsPerRound: 20, MaximumConcurrentAnalyses: 3}
 	coinInsightController := controller.NewCoinInsightController(application.NewCoinInsightApplication(service.NewCoinInsightService(
 		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResultRepository, underTest.coinInsightRepository,
-		service.NewCoinInsightMaterialService(underTest.coinIntelligenceRepository, nil, nil, policy), nil, clockProxy, policy)))
+		service.NewCoinInsightMaterialService(underTest.coinIntelligenceRepository, nil, service.NewPerpetualMarketStructureService(nil, time.Second), policy), nil, clockProxy, policy)))
 	underTest.engine.POST("/coin-insights", coinInsightController.AnalyzeCoinCandidates)
 	underTest.engine.GET("/coin-insights/latest", coinInsightController.GetLatestCoinInsights)
 	underTest.engine.GET("/pipeline-runs/:pipelineRunId/coin-insights", coinInsightController.GetCoinInsightsOfPipelineRun)

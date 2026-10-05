@@ -18,7 +18,7 @@ type HuntVerdictService struct {
 	coinInsightRepository           domaininterface.ICoinInsightRepository
 	coinVerdictRepository           domaininterface.ICoinVerdictRepository
 	huntBoardRepository             domaininterface.IHuntBoardRepository
-	perpetualMarketStructureProxies []domaininterface.IPerpetualMarketStructureProxy
+	perpetualMarketStructureService *PerpetualMarketStructureService
 	huntVerdictStrategistProxy      domaininterface.IHuntVerdictStrategistProxy
 	clockProxy                      domaininterface.IClockProxy
 	huntVerdictPolicy               vo.HuntVerdictPolicyVo
@@ -29,7 +29,7 @@ func NewHuntVerdictService(
 	coinInsightRepository domaininterface.ICoinInsightRepository,
 	coinVerdictRepository domaininterface.ICoinVerdictRepository,
 	huntBoardRepository domaininterface.IHuntBoardRepository,
-	perpetualMarketStructureProxies []domaininterface.IPerpetualMarketStructureProxy,
+	perpetualMarketStructureService *PerpetualMarketStructureService,
 	huntVerdictStrategistProxy domaininterface.IHuntVerdictStrategistProxy,
 	clockProxy domaininterface.IClockProxy,
 	huntVerdictPolicy vo.HuntVerdictPolicyVo,
@@ -39,7 +39,7 @@ func NewHuntVerdictService(
 		coinInsightRepository:           coinInsightRepository,
 		coinVerdictRepository:           coinVerdictRepository,
 		huntBoardRepository:             huntBoardRepository,
-		perpetualMarketStructureProxies: perpetualMarketStructureProxies,
+		perpetualMarketStructureService: perpetualMarketStructureService,
 		huntVerdictStrategistProxy:      huntVerdictStrategistProxy,
 		clockProxy:                      clockProxy,
 		huntVerdictPolicy:               huntVerdictPolicy,
@@ -76,23 +76,15 @@ func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 		return dto.PipelineRunDto{}, fmt.Errorf("record verdict run: %w", createError)
 	}
 
-	// Every analyzed coin is shown with the market as it is now; the first exchange in priority order that lists it speaks for it.
+	// Every analyzed coin is shown with the market as it is now.
 	materials := []vo.HuntVerdictMaterialVo{}
 	for _, coinInsight := range coinInsights {
 		if !coinInsight.Succeeded {
 			continue
 		}
 		material := vo.HuntVerdictMaterialVo{CoinSymbol: coinInsight.CoinSymbol, Direction: coinInsight.Direction, Strength: coinInsight.Strength,
-			Catalyst: coinInsight.Catalyst, Risks: coinInsight.Risks, Evidence: coinInsight.Evidence, DataGaps: coinInsight.DataGaps}
-		for _, perpetualMarketStructureProxy := range huntVerdictService.perpetualMarketStructureProxies {
-			marketContext, cancelMarket := context.WithTimeout(executionContext, huntVerdictService.huntVerdictPolicy.MarketSourceTimeout)
-			marketStructure, found, marketError := perpetualMarketStructureProxy.FindMarketStructure(marketContext, coinInsight.CoinSymbol)
-			cancelMarket()
-			if marketError == nil && found {
-				material.MarketStructure = &marketStructure
-				break
-			}
-		}
+			Catalyst: coinInsight.Catalyst, Risks: coinInsight.Risks, Evidence: coinInsight.Evidence, DataGaps: coinInsight.DataGaps,
+			MarketStructure: huntVerdictService.perpetualMarketStructureService.FindMarketStructure(executionContext, coinInsight.CoinSymbol)}
 		materials = append(materials, material)
 	}
 

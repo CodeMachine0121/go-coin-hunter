@@ -31,7 +31,7 @@ const (
 func huntVerdictPolicy() vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{MinimumLeverage: 1, MaximumLeverage: 5, MaximumPositionSizePercent: decimal.NewFromInt(10),
 		MinimumStopLossPercent: decimal.NewFromInt(1), MaximumStopLossPercent: decimal.NewFromInt(50),
-		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200), MarketSourceTimeout: time.Second}
+		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200)}
 }
 
 func longAnswer(coinSymbol string) vo.HuntVerdictAnswerVo {
@@ -101,7 +101,7 @@ func newHuntVerdictUnderTest(t *testing.T, analyzedSymbols ...string) *huntVerdi
 	clockProxy.EXPECT().Now().Return(verdictStartedAt).AnyTimes()
 	underTest.huntVerdictApplication = application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 		underTest.pipelineRunRepository, underTest.coinInsights, underTest.coinVerdicts, underTest.huntBoard,
-		[]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket, underTest.bybitMarket},
+		service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket, underTest.bybitMarket}, time.Second),
 		underTest.strategist, clockProxy, huntVerdictPolicy()))
 
 	return underTest
@@ -256,7 +256,7 @@ func TestSynthesizeHuntVerdictsSurfacesStorageFailures(t *testing.T) {
 			clockProxy.EXPECT().Now().Return(verdictStartedAt).AnyTimes()
 			huntVerdictApplication := application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 				underTest.pipelineRunRepository, underTest.coinInsights, coinVerdicts, huntBoard,
-				[]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, underTest.strategist, clockProxy, huntVerdictPolicy()))
+				service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second), underTest.strategist, clockProxy, huntVerdictPolicy()))
 
 			_, synthesizeError := huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
 
@@ -318,7 +318,7 @@ func TestSynthesizeHuntVerdictsSurfacesStorageFailures(t *testing.T) {
 			clockProxy := mocks.NewMockIClockProxy(controller)
 			clockProxy.EXPECT().Now().Return(verdictStartedAt).AnyTimes()
 			huntVerdictApplication := application.NewHuntVerdictApplication(service.NewHuntVerdictService(
-				pipelineRuns, insights, verdicts, huntBoard, nil, strategist, clockProxy, huntVerdictPolicy()))
+				pipelineRuns, insights, verdicts, huntBoard, service.NewPerpetualMarketStructureService(nil, time.Second), strategist, clockProxy, huntVerdictPolicy()))
 
 			_, synthesizeError := huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
 

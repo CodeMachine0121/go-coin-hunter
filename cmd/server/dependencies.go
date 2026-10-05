@@ -111,7 +111,8 @@ func coinInsightServiceFor(
 		service.NewCoinInsightMaterialService(
 			persistence.NewCoinIntelligenceRepository(database),
 			news.NewGoogleNewsCoinNewsProxy(httpClient, applicationConfig.Insight.GoogleNewsBaseUrl),
-			perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
+			service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
+				applicationConfig.Insight.MaterialSourceTimeout),
 			coinInsightPolicy,
 		),
 		claudeAnalysisProxy,
@@ -122,7 +123,7 @@ func coinInsightServiceFor(
 
 // huntVerdictPolicyFor holds the safe ranges every verdict is clamped into: leverage 1-5, position up to 10%,
 // stop loss 1-50% and take profit 1-200% of the latest price.
-func huntVerdictPolicyFor(verdictConfig config.VerdictConfig) vo.HuntVerdictPolicyVo {
+func huntVerdictPolicyFor() vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{
 		MinimumLeverage:            1,
 		MaximumLeverage:            5,
@@ -131,7 +132,6 @@ func huntVerdictPolicyFor(verdictConfig config.VerdictConfig) vo.HuntVerdictPoli
 		MaximumStopLossPercent:     decimal.NewFromInt(50),
 		MinimumTakeProfitPercent:   decimal.NewFromInt(1),
 		MaximumTakeProfitPercent:   decimal.NewFromInt(200),
-		MarketSourceTimeout:        verdictConfig.MarketSourceTimeout,
 	}
 }
 
@@ -182,10 +182,11 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 			persistence.NewCoinInsightRepository(database),
 			persistence.NewCoinVerdictRepository(database),
 			persistence.NewHuntBoardRepository(database),
-			perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
+			service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
+				applicationConfig.Verdict.MarketSourceTimeout),
 			claudeAnalysisProxy,
 			clockProxy,
-			huntVerdictPolicyFor(applicationConfig.Verdict),
+			huntVerdictPolicyFor(),
 		)),
 		pipelineRun: application.NewPipelineRunApplication(service.NewPipelineRunService(pipelineRunRepository, clockProxy)),
 	}

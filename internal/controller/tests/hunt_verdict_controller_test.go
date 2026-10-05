@@ -42,7 +42,7 @@ func newVerdictRoutesUnderTest(t *testing.T) verdictRoutesUnderTest {
 	clockProxy.EXPECT().Now().Return(time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)).AnyTimes()
 	huntVerdictController := controller.NewHuntVerdictController(application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 		underTest.pipelineRunRepository, underTest.coinInsightRepository, underTest.coinVerdictRepository, underTest.huntBoardRepository,
-		nil, underTest.strategist, clockProxy, vo.HuntVerdictPolicyVo{})))
+		service.NewPerpetualMarketStructureService(nil, time.Second), underTest.strategist, clockProxy, vo.HuntVerdictPolicyVo{})))
 	underTest.engine.POST("/hunt-verdicts", huntVerdictController.SynthesizeHuntVerdicts)
 	underTest.engine.GET("/hunt-board", huntVerdictController.GetHuntBoard)
 	underTest.engine.GET("/pipeline-runs/:pipelineRunId/coin-verdicts", huntVerdictController.GetCoinVerdictsOfPipelineRun)

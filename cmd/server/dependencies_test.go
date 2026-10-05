@@ -21,7 +21,7 @@ func TestPerpetualMarketStructureExchangesAreListedInPreferenceOrder(t *testing.
 }
 
 func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
-	huntVerdictPolicy := huntVerdictPolicyFor(config.VerdictConfig{MarketSourceTimeout: 15 * time.Second})
+	huntVerdictPolicy := huntVerdictPolicyFor()
 
 	assert.Equal(t, 1, huntVerdictPolicy.MinimumLeverage)
 	assert.Equal(t, 5, huntVerdictPolicy.MaximumLeverage)
@@ -30,7 +30,6 @@ func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
 	assert.Equal(t, "50", huntVerdictPolicy.MaximumStopLossPercent.String())
 	assert.Equal(t, "1", huntVerdictPolicy.MinimumTakeProfitPercent.String())
 	assert.Equal(t, "200", huntVerdictPolicy.MaximumTakeProfitPercent.String())
-	assert.Equal(t, 15*time.Second, huntVerdictPolicy.MarketSourceTimeout)
 }
 
 func TestInsightShowsIntelligenceFromTheDiscoveryWindow(t *testing.T) {

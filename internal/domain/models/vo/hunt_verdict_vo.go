@@ -1,10 +1,6 @@
 package vo
 
-import (
-	"time"
-
-	"github.com/shopspring/decimal"
-)
+import "github.com/shopspring/decimal"
 
 type HuntActionVo string
 
@@ -49,6 +45,4 @@ type HuntVerdictPolicyVo struct {
 	MaximumStopLossPercent     decimal.Decimal
 	MinimumTakeProfitPercent   decimal.Decimal
 	MaximumTakeProfitPercent   decimal.Decimal
-	// MarketSourceTimeout bounds each exchange asked for the coin's latest market structure.
-	MarketSourceTimeout time.Duration
 }

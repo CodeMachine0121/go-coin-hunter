@@ -20,7 +20,7 @@
 | `domain/interface/i_hunt_verdict_strategist_proxy.go` · `i_coin_verdict_repository.go` · `i_hunt_board_repository.go` | **Add** | CIO、裁決歷史、結果表的契約 |
 | `domain/models/vo/*` · `domains/hunt_verdicts_domain.go` · `dto/*` · `entities/coin_verdict.go` · `entities/hunt_board_entry.go` | **Add** | 素材、回覆、裁決正規化、結果表列 |
 | `domain/service/hunt_verdict_service.go` | **Add** | 裁決編排 |
-| `infrastructure/verdict/claude_hunt_verdict_strategist_proxy.go` | **Add** | Claude：固定 CIO 系統提示（可快取）、JSON schema、effort、伺服器端拒答備援、SDK 不自動重送 |
+| `infrastructure/analysis/claude_analysis_proxy.go` | **Add（重構合併）** | 與洞察共用的 Claude proxy：固定 CIO 系統提示（可快取）、JSON schema、effort、伺服器端拒答備援、SDK 不自動重送 |
 | `infrastructure/persistence/coin_verdict_repository.go` · `hunt_board_repository.go` | **Add** | 歷史；結果表改寫（交易內 upsert + 刪除缺席者） |
 | `application` · `controller` | **Add** | `HuntVerdictApplication`、`HuntVerdictController` |
 | `PipelineRunStepVo` · `PipelineRunDomain` | **Modify** | 步驟 `verdict`；成功 / 失敗沿用 `Fail` 與新的 `Succeed` |
@@ -69,7 +69,8 @@ flowchart TD
 - **Most likely next requirement:** 排程切片在洞察後自動觸發裁決；結果表變化時推播；回測裁決績效。
 - **Where it lands:** 排程呼叫 `HuntVerdictApplication` 的 job 版本（觸發來源 `job`）；推播可在 `Rewrite` 之後比較新舊結果表；回測讀 `CoinVerdict` 歷史。
 - **Do not hardcode:** 模型、effort、範圍上下限（`HuntVerdictPolicyVo`）。
-- **Known debt:** 兩個 Claude proxy（洞察、裁決）各自建立 client（幾行重複），換供應商時一併處理。
+- **Shared pieces (重構後):** 洞察分析師與 CIO 由同一個 `ClaudeAnalysisProxy`（`infrastructure/analysis/`）實作兩個能力介面——一個外部資源一個 Proxy；「依交易所優先序取第一家有的市場結構、失敗的略過」由 `PerpetualMarketStructureService` 單一處負責，洞察素材與裁決共用。
+- **Known debt:** 探索、過濾、洞察、裁決四個 service 各自一段「建輪次 → 工作 → 失敗或結論」；失敗語意不同（例如過濾與裁決對外部失敗回失敗輪次、對儲存失敗回錯），共用需旗標而變淺，維持各自實作。
 
 ---
 

@@ -224,7 +224,7 @@ func servicesFor(database *gorm.DB, applicationConfig config.ApplicationConfig) 
 	}
 }
 
-func registerRoutes(engine *gin.Engine, builtApplications applications) {
+func registerRoutes(engine *gin.Engine, builtApplications applications, shutdownStarted <-chan struct{}) {
 	engine.GET("/health", func(context *gin.Context) {
 		context.JSON(http.StatusOK, gin.H{"status": "Healthy"})
 	})
@@ -249,7 +249,7 @@ func registerRoutes(engine *gin.Engine, builtApplications applications) {
 	engine.GET("/hunt-board", huntVerdictController.GetHuntBoard)
 	engine.GET("/pipeline-runs/:pipelineRunId/coin-verdicts", huntVerdictController.GetCoinVerdictsOfPipelineRun)
 
-	huntPipelineController := controller.NewHuntPipelineController(builtApplications.huntPipeline)
+	huntPipelineController := controller.NewHuntPipelineController(builtApplications.huntPipeline, shutdownStarted)
 	engine.POST("/hunt-rounds", huntPipelineController.RunHuntRound)
 
 	pipelineRunController := controller.NewPipelineRunController(builtApplications.pipelineRun)

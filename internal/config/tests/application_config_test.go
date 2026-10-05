@@ -69,6 +69,14 @@ func TestLoadReadsTheHuntPipelineInterval(t *testing.T) {
 	}
 }
 
+func TestLoadReadsTheShutdownGracePeriod(t *testing.T) {
+	t.Setenv("SHUTDOWN_GRACE_MINUTES", "")
+	assert.Equal(t, 15*time.Minute, config.Load().ShutdownGracePeriod)
+
+	t.Setenv("SHUTDOWN_GRACE_MINUTES", "30")
+	assert.Equal(t, 30*time.Minute, config.Load().ShutdownGracePeriod)
+}
+
 func TestLoadVerdictSettings(t *testing.T) {
 	t.Setenv("VERDICT_MODEL", "")
 	t.Setenv("VERDICT_EFFORT", "")

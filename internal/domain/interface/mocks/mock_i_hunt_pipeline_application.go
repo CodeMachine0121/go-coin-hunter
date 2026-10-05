@@ -43,11 +43,12 @@ func (m *MockIHuntPipelineApplication) EXPECT() *MockIHuntPipelineApplicationMoc
 }
 
 // RunHuntRound mocks base method.
-func (m *MockIHuntPipelineApplication) RunHuntRound(executionContext context.Context, stopBetweenSteps <-chan struct{}, triggerSource vo.PipelineRunTriggerSourceVo) dto.HuntRoundDto {
+func (m *MockIHuntPipelineApplication) RunHuntRound(executionContext context.Context, stopBetweenSteps <-chan struct{}, triggerSource vo.PipelineRunTriggerSourceVo) (dto.HuntRoundDto, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunHuntRound", executionContext, stopBetweenSteps, triggerSource)
 	ret0, _ := ret[0].(dto.HuntRoundDto)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RunHuntRound indicates an expected call of RunHuntRound.

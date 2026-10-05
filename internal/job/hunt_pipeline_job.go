@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	domaininterface "github.com/CodeMachine0121/go-coin-hunter/internal/domain/interface"
@@ -19,7 +18,6 @@ type HuntPipelineJob struct {
 	stopRequested           chan struct{}
 	stopOnce                sync.Once
 	finished                chan struct{}
-	roundRunning            atomic.Bool
 	rounds                  sync.WaitGroup
 }
 
@@ -53,28 +51,17 @@ func (huntPipelineJob *HuntPipelineJob) Start(executionContext context.Context) 
 	}()
 }
 
-// startRound runs a round in the background unless one is still running; the flag is what keeps rounds from overlapping.
+// startRound runs a round in the background; the pipeline itself refuses a round while another is running, so a tick
+// that comes during a long round is skipped rather than queued.
 func (huntPipelineJob *HuntPipelineJob) startRound(executionContext context.Context) {
-	if !huntPipelineJob.roundRunning.CompareAndSwap(false, true) {
-		log.Println("hunt round skipped: the previous round is still running")
-		return
-	}
 	huntPipelineJob.rounds.Add(1)
 	go func() {
 		defer huntPipelineJob.rounds.Done()
-		defer huntPipelineJob.roundRunning.Store(false)
 
-		// One line per round, enough to trace which run of which step stopped it.
-		huntRound := huntPipelineJob.huntPipelineApplication.RunHuntRound(executionContext, huntPipelineJob.stopRequested, vo.PipelineRunTriggerSourceJob)
-		pipelineRunIDs := make([]uint, 0, len(huntRound.Steps))
-		for _, step := range huntRound.Steps {
-			pipelineRunIDs = append(pipelineRunIDs, step.ID)
+		if _, roundError := huntPipelineJob.huntPipelineApplication.RunHuntRound(
+			executionContext, huntPipelineJob.stopRequested, vo.PipelineRunTriggerSourceJob); roundError != nil {
+			log.Printf("hunt round skipped: %v", roundError)
 		}
-		if huntRound.Completed {
-			log.Printf("hunt round completed: pipeline runs %v", pipelineRunIDs)
-			return
-		}
-		log.Printf("hunt round stopped at %s (%s): pipeline runs %v", huntRound.StoppedStep, huntRound.StoppedReason, pipelineRunIDs)
 	}()
 }
 

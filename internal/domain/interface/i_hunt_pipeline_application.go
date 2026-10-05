@@ -13,5 +13,6 @@ import (
 type IHuntPipelineApplication interface {
 	// RunHuntRound starts no further step once stopBetweenSteps is closed, letting the step in flight finish; a nil
 	// channel never stops the round. An ended context abandons the step in flight as well.
-	RunHuntRound(executionContext context.Context, stopBetweenSteps <-chan struct{}, triggerSource vo.PipelineRunTriggerSourceVo) dto.HuntRoundDto
+	// RunHuntRound refuses with domains.ErrHuntRoundAlreadyRunning while another round, scheduled or manual, is running.
+	RunHuntRound(executionContext context.Context, stopBetweenSteps <-chan struct{}, triggerSource vo.PipelineRunTriggerSourceVo) (dto.HuntRoundDto, error)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/handler"
 	domaininterface "github.com/CodeMachine0121/go-coin-hunter/internal/domain/interface"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/interface/mocks"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/domains"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/entities"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/service"
@@ -181,7 +182,8 @@ func TestRunHuntRoundRunsEveryStepInOrder(t *testing.T) {
 		return nil
 	})
 
-	huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+	huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+	require.NoError(t, roundError)
 
 	assert.True(t, huntRound.Completed)
 	assert.Empty(t, huntRound.StoppedStep)
@@ -202,7 +204,8 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 		world := newHuntPipelineWorld(t)
 		world.discoveryFinds()
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
 
 		assert.False(t, huntRound.Completed)
 		assert.Equal(t, "discovery", huntRound.StoppedStep)
@@ -215,7 +218,8 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 		world := newHuntPipelineWorld(t)
 		world.discoveryFinds("DOUU")
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
 
 		assert.Equal(t, "filtering", huntRound.StoppedStep)
 		assert.Equal(t, "過濾未成功：noData", huntRound.StoppedReason)
@@ -228,7 +232,8 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 		world.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(bullishAnswer(), nil)
 		world.insightSaveError = errors.New("disk full")
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
 
 		assert.Equal(t, "insight", huntRound.StoppedStep)
 		assert.Contains(t, huntRound.StoppedReason, "disk full")
@@ -242,7 +247,8 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 		world.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(bullishAnswer(), nil)
 		world.strategist.EXPECT().SynthesizeVerdicts(gomock.Any(), gomock.Any()).Return(nil, errors.New("overloaded"))
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceManual)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceManual)
+		require.NoError(t, roundError)
 
 		assert.Equal(t, "verdict", huntRound.StoppedStep)
 		assert.Equal(t, "裁決未成功：failed", huntRound.StoppedReason)
@@ -257,7 +263,8 @@ func TestRunHuntRoundStartsNoStepOnceAskedToStop(t *testing.T) {
 		stopped := make(chan struct{})
 		close(stopped)
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), stopped, vo.PipelineRunTriggerSourceJob)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), stopped, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
 
 		assert.Equal(t, "discovery", huntRound.StoppedStep)
 		assert.Equal(t, "探索未開始：服務關閉中", huntRound.StoppedReason)
@@ -269,7 +276,8 @@ func TestRunHuntRoundStartsNoStepOnceAskedToStop(t *testing.T) {
 		ended, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(ended, nil, vo.PipelineRunTriggerSourceJob)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(ended, nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
 
 		assert.Equal(t, "探索未開始：context canceled", huntRound.StoppedReason)
 		assert.Empty(t, world.stepsRun())
@@ -285,11 +293,42 @@ func TestRunHuntRoundStartsNoStepOnceAskedToStop(t *testing.T) {
 				return []vo.InformationItemVo{{SourceName: "bybitAnnouncement", ExternalIdentifier: "ZORA", DeclaredCoinSymbols: []string{"ZORA"}, PublishedAt: &roundStartedAt}}, nil
 			})
 
-		huntRound := world.huntPipelineApplication.RunHuntRound(context.Background(), stopRequested, vo.PipelineRunTriggerSourceJob)
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), stopRequested, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
 
 		assert.Equal(t, "filtering", huntRound.StoppedStep)
 		assert.Equal(t, "過濾未開始：服務關閉中", huntRound.StoppedReason)
 		require.Len(t, huntRound.Steps, 1)
 		assert.Equal(t, string(vo.PipelineRunStatusSucceeded), huntRound.Steps[0].Status)
 	})
+}
+
+func TestRunHuntRoundRefusesASecondRoundWhileOneIsRunning(t *testing.T) {
+	world := newHuntPipelineWorld(t)
+	inDiscovery := make(chan struct{})
+	release := make(chan struct{})
+	world.informationSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, int) ([]vo.InformationItemVo, error) {
+			close(inDiscovery)
+			<-release
+			return []vo.InformationItemVo{}, nil
+		})
+	firstRoundDone := make(chan struct{})
+	go func() {
+		defer close(firstRoundDone)
+		_, _ = world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+	}()
+	<-inDiscovery
+
+	_, overlapError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceManual)
+
+	assert.ErrorIs(t, overlapError, domains.ErrHuntRoundAlreadyRunning)
+	assert.EqualError(t, overlapError, "已有獵捕回合進行中")
+	close(release)
+	<-firstRoundDone
+	assert.Equal(t, []string{"discovery:job"}, world.stepsRun())
+
+	world.informationSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).Return([]vo.InformationItemVo{}, nil)
+	_, laterError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceManual)
+	assert.NoError(t, laterError, "a round may run again once the previous one ended")
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/config"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/persistence"
@@ -16,10 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
-
-// shutdownGracePeriod outlasts the slowest single step, the chief investment officer's 180-second answer, so a round
-// stopping at a step boundary is not cut off.
-const shutdownGracePeriod = 4 * time.Minute
 
 func main() {
 	if loadError := godotenv.Load(); loadError != nil {
@@ -50,7 +45,7 @@ func main() {
 	defer stopListeningForSignals()
 
 	engine := gin.Default()
-	registerRoutes(engine, builtApplications)
+	registerRoutes(engine, builtApplications, shutdownSignalled.Done())
 
 	// Jobs get their own context: on shutdown they are first asked to stop at a step boundary, and only abandoned if the
 	// grace period runs out.
@@ -67,7 +62,7 @@ func main() {
 	}()
 
 	<-shutdownSignalled.Done()
-	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), shutdownGracePeriod)
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), applicationConfig.ShutdownGracePeriod)
 	defer cancelShutdown()
 
 	backgroundJobManager.StopAll()

@@ -21,6 +21,9 @@ type ApplicationConfig struct {
 	Verdict               VerdictConfig
 	// HuntPipelineInterval is how often the scheduled hunt round runs; zero or less switches the schedule off.
 	HuntPipelineInterval time.Duration
+	// ShutdownGracePeriod is how long shutdown waits for the step in flight before abandoning it; an abandoned step's
+	// run is marked interrupted at the next start.
+	ShutdownGracePeriod time.Duration
 }
 
 // VerdictConfig holds the chief investment officer's model settings; the API key is shared with the insight step.
@@ -160,6 +163,7 @@ func Load() ApplicationConfig {
 			MaterialSourceTimeout:        15 * time.Second,
 		},
 		HuntPipelineInterval: time.Duration(parseIntWithDefault(os.Getenv("HUNT_PIPELINE_INTERVAL_HOURS"), 4)) * time.Hour,
+		ShutdownGracePeriod:  time.Duration(parsePositiveIntWithDefault(os.Getenv("SHUTDOWN_GRACE_MINUTES"), 15)) * time.Minute,
 		Verdict: VerdictConfig{
 			Model:               cmp.Or(os.Getenv("VERDICT_MODEL"), "claude-opus-5-5"),
 			Effort:              cmp.Or(os.Getenv("VERDICT_EFFORT"), "high"),

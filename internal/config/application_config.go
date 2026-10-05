@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type ApplicationConfig struct {
@@ -14,6 +16,7 @@ type ApplicationConfig struct {
 	Database              DatabaseConfig
 	BackgroundJobsEnabled bool
 	Discovery             DiscoveryConfig
+	Filtering             FilteringConfig
 }
 
 type DatabaseConfig struct {
@@ -51,10 +54,34 @@ type DiscoveryConfig struct {
 	DexScreenerBaseUrl   string
 }
 
+// FilteringConfig holds the filtering thresholds and where the filtering data sources live.
+type FilteringConfig struct {
+	MaximumTaxRate                  decimal.Decimal
+	MinimumDailyVolumeUsd           decimal.Decimal
+	MinimumFullyDilutedValuationUsd decimal.Decimal
+	MaximumFullyDilutedValuationUsd decimal.Decimal
+	MinimumCirculatingRatio         decimal.Decimal
+	UnlockLookahead                 time.Duration
+	MaximumUnlockRatioOfCirculating decimal.Decimal
+	SourceRequestTimeout            time.Duration
+	// RoundBaseBudget bounds gathering a round's data, before the allowance each security lookup adds.
+	RoundBaseBudget time.Duration
+	// TokenSecurityRequestInterval spaces token security lookups to stay inside the free request rate.
+	TokenSecurityRequestInterval time.Duration
+	GoPlusBaseUrl                string
+	DefiLlamaDatasetsBaseUrl     string
+}
+
 // The per-source item limit and timeout are fixed by the discovery rules, not operator settings.
 const (
 	informationSourceItemLimit      = 50
 	informationSourceRequestTimeout = 15 * time.Second
+	// filteringSourceRequestTimeout is longer than discovery's: the coin list and contract lists are large answers.
+	filteringSourceRequestTimeout = 20 * time.Second
+	// filteringRoundBaseBudget is the agreed round time before security lookups: 60 seconds.
+	filteringRoundBaseBudget = 60 * time.Second
+	// tokenSecurityRequestInterval keeps token security lookups near the free tier's thirty per minute.
+	tokenSecurityRequestInterval = 2 * time.Second
 )
 
 // defaultExcludedCoinSymbols are majors and stablecoins: never new coins, however often they are mentioned.
@@ -85,6 +112,20 @@ func Load() ApplicationConfig {
 			CoinGeckoBaseUrl:     cmp.Or(os.Getenv("COINGECKO_BASE_URL"), "https://api.coingecko.com"),
 			DexScreenerBaseUrl:   cmp.Or(os.Getenv("DEXSCREENER_BASE_URL"), "https://api.dexscreener.com"),
 		},
+		Filtering: FilteringConfig{
+			MaximumTaxRate:                  parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_TAX_RATE"), "0.1"),
+			MinimumDailyVolumeUsd:           parsePositiveDecimalWithDefault(os.Getenv("FILTER_MINIMUM_DAILY_VOLUME_USD"), "1000000"),
+			MinimumFullyDilutedValuationUsd: parsePositiveDecimalWithDefault(os.Getenv("FILTER_MINIMUM_FDV_USD"), "10000000"),
+			MaximumFullyDilutedValuationUsd: parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_FDV_USD"), "1000000000"),
+			MinimumCirculatingRatio:         parsePositiveDecimalWithDefault(os.Getenv("FILTER_MINIMUM_CIRCULATING_RATIO"), "0.2"),
+			UnlockLookahead:                 time.Duration(parsePositiveIntWithDefault(os.Getenv("FILTER_UNLOCK_LOOKAHEAD_DAYS"), 14)) * 24 * time.Hour,
+			MaximumUnlockRatioOfCirculating: parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_UNLOCK_RATIO"), "0.05"),
+			SourceRequestTimeout:            filteringSourceRequestTimeout,
+			RoundBaseBudget:                 filteringRoundBaseBudget,
+			TokenSecurityRequestInterval:    tokenSecurityRequestInterval,
+			GoPlusBaseUrl:                   cmp.Or(os.Getenv("GOPLUS_BASE_URL"), "https://api.gopluslabs.io"),
+			DefiLlamaDatasetsBaseUrl:        cmp.Or(os.Getenv("DEFILLAMA_DATASETS_BASE_URL"), "https://defillama-datasets.llama.fi"),
+		},
 	}
 }
 
@@ -102,6 +143,16 @@ func parsePositiveIntWithDefault(rawValue string, defaultValue int) int {
 	parsedValue, parseError := strconv.Atoi(strings.TrimSpace(rawValue))
 	if parseError != nil || parsedValue <= 0 {
 		return defaultValue
+	}
+
+	return parsedValue
+}
+
+// parsePositiveDecimalWithDefault treats zero, negatives and typos alike as "use the default".
+func parsePositiveDecimalWithDefault(rawValue string, defaultValue string) decimal.Decimal {
+	parsedValue, parseError := decimal.NewFromString(strings.TrimSpace(rawValue))
+	if parseError != nil || !parsedValue.IsPositive() {
+		return decimal.RequireFromString(defaultValue)
 	}
 
 	return parsedValue

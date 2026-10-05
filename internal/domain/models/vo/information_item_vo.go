@@ -14,4 +14,7 @@ type InformationItemVo struct {
 	// DeclaredCoinSymbols is filled by structured sources; announcements leave it empty and the title is read instead.
 	DeclaredCoinSymbols []string
 	IsTraditionalAsset  bool
+	// ChainID and ContractAddress are declared by on-chain sources, so later steps can identify the token exactly.
+	ChainID         string
+	ContractAddress string
 }

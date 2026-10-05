@@ -17,6 +17,7 @@
 | Controller | `Controller` | controller |
 | Repository | `Repository` | infrastructure |
 | Proxy | `Proxy` | infrastructure |
+| 策略處理器 | `Handler` | domain（`domain/handler/`） |
 
 `Service` 後綴**僅**用於跨物件的編排；單一物件的計算放它自己的 Domain Model。
 

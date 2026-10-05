@@ -18,6 +18,9 @@ type CoinIntelligence struct {
 	Link               string
 	PublishedAt        time.Time `gorm:"not null;index"`
 	IsTraditionalAsset bool      `gorm:"not null"`
+	// ChainID and ContractAddress are empty unless an on-chain source declared them; the address keeps its original case.
+	ChainID         string `gorm:"size:64"`
+	ContractAddress string `gorm:"size:128"`
 }
 
 func (coinIntelligence CoinIntelligence) ToDto() dto.CoinIntelligenceDto {

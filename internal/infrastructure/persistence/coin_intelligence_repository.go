@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/entities"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -56,4 +57,32 @@ func (coinIntelligenceRepository *CoinIntelligenceRepository) FindByPipelineRunI
 	}
 
 	return coinIntelligences, nil
+}
+
+func (coinIntelligenceRepository *CoinIntelligenceRepository) FindDeclaredContractAddresses(
+	executionContext context.Context, coinSymbols []string,
+) (map[string]vo.TokenAddressVo, error) {
+	// GORM's IN clause takes the loose element type.
+	coinSymbolValues := make([]any, 0, len(coinSymbols))
+	for _, coinSymbol := range coinSymbols {
+		coinSymbolValues = append(coinSymbolValues, coinSymbol)
+	}
+	coinIntelligences := []entities.CoinIntelligence{}
+	if findError := coinIntelligenceRepository.database.WithContext(executionContext).
+		Where(clause.IN{Column: "coin_symbol", Values: coinSymbolValues}).
+		Where(clause.Neq{Column: "contract_address", Value: ""}).
+		Order("published_at").Order("id").
+		Find(&coinIntelligences).Error; findError != nil {
+		return nil, fmt.Errorf("find declared contract addresses: %w", findError)
+	}
+
+	// Ordered oldest first, so the most recently declared address is the one left in the map.
+	declaredContractAddresses := map[string]vo.TokenAddressVo{}
+	for _, coinIntelligence := range coinIntelligences {
+		declaredContractAddresses[coinIntelligence.CoinSymbol] = vo.TokenAddressVo{
+			ChainID: coinIntelligence.ChainID, Address: coinIntelligence.ContractAddress,
+		}
+	}
+
+	return declaredContractAddresses, nil
 }

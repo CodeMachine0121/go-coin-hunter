@@ -15,6 +15,7 @@ import (
 	time "time"
 
 	entities "github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/entities"
+	vo "github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -55,6 +56,21 @@ func (m *MockICoinIntelligenceRepository) FindByPipelineRunID(executionContext c
 func (mr *MockICoinIntelligenceRepositoryMockRecorder) FindByPipelineRunID(executionContext, pipelineRunID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByPipelineRunID", reflect.TypeOf((*MockICoinIntelligenceRepository)(nil).FindByPipelineRunID), executionContext, pipelineRunID)
+}
+
+// FindDeclaredContractAddresses mocks base method.
+func (m *MockICoinIntelligenceRepository) FindDeclaredContractAddresses(executionContext context.Context, coinSymbols []string) (map[string]vo.TokenAddressVo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindDeclaredContractAddresses", executionContext, coinSymbols)
+	ret0, _ := ret[0].(map[string]vo.TokenAddressVo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindDeclaredContractAddresses indicates an expected call of FindDeclaredContractAddresses.
+func (mr *MockICoinIntelligenceRepositoryMockRecorder) FindDeclaredContractAddresses(executionContext, coinSymbols any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindDeclaredContractAddresses", reflect.TypeOf((*MockICoinIntelligenceRepository)(nil).FindDeclaredContractAddresses), executionContext, coinSymbols)
 }
 
 // FindPublishedSince mocks base method.

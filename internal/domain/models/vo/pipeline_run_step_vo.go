@@ -5,4 +5,5 @@ type PipelineRunStepVo string
 
 const (
 	PipelineRunStepDiscovery PipelineRunStepVo = "discovery"
+	PipelineRunStepFiltering PipelineRunStepVo = "filtering"
 )

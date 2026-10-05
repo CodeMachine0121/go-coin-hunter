@@ -19,6 +19,7 @@
 
 - 本 repo 的 author / committer 一律是 `codemachine0121 <CodeMachine0121@gmail.com>`（已設在 repo 的 local git config，勿改）。
 - 一律在 **feature branch** 開發（`feature/{feature-slug}`），不直接在 `main` 上 commit。
+- 切片完成（contract 通過、CI 綠燈）後開 PR，**在本機以 `git merge --no-ff` 合併再推 `main`**——不用 GitHub 的 merge 按鈕，它會以 GitHub 帳號顯示名稱產生 merge commit，違反上一條的身分規定。
 - **每完成一個段落（一個實作步驟、一份文件、一次 App 組裝）就 commit 一次**，不累積成大 commit。
 - commit message 遵循 **Conventional Commits**，**一律英文**（`feat(scope): ...`、`docs: ...`、`refactor: ...`、`test: ...`）。
 - commit message、分支名、PR 標題**不得出現任何 SDD 代號**（測試案例編號、AC 編號、文件名如 PRD/ARCH）。描述行為，不描述流程。

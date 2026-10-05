@@ -39,6 +39,26 @@ func TestLoadReadsOverrides(t *testing.T) {
 	assert.Equal(t, []string{"BTC", "DOGE"}, applicationConfig.Discovery.ExcludedCoinSymbols)
 }
 
+func TestLoadReadsFilteringThresholds(t *testing.T) {
+	t.Setenv("FILTER_MAXIMUM_TAX_RATE", "")
+	t.Setenv("FILTER_MINIMUM_DAILY_VOLUME_USD", "2500000")
+	t.Setenv("FILTER_MINIMUM_FDV_USD", "-1")
+	t.Setenv("FILTER_UNLOCK_LOOKAHEAD_DAYS", "7")
+
+	filteringConfig := config.Load().Filtering
+
+	assert.Equal(t, "0.1", filteringConfig.MaximumTaxRate.String())
+	assert.Equal(t, "2500000", filteringConfig.MinimumDailyVolumeUsd.String())
+	assert.Equal(t, "10000000", filteringConfig.MinimumFullyDilutedValuationUsd.String())
+	assert.Equal(t, "1000000000", filteringConfig.MaximumFullyDilutedValuationUsd.String())
+	assert.Equal(t, "0.2", filteringConfig.MinimumCirculatingRatio.String())
+	assert.Equal(t, 7*24*time.Hour, filteringConfig.UnlockLookahead)
+	assert.Equal(t, "0.05", filteringConfig.MaximumUnlockRatioOfCirculating.String())
+	assert.Equal(t, 20*time.Second, filteringConfig.SourceRequestTimeout)
+	assert.Equal(t, 60*time.Second, filteringConfig.RoundBaseBudget)
+	assert.Equal(t, 2*time.Second, filteringConfig.TokenSecurityRequestInterval)
+}
+
 func TestLoadIgnoresANonPositiveWindow(t *testing.T) {
 	t.Setenv("DISCOVERY_WINDOW_HOURS", "-3")
 

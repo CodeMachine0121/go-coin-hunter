@@ -3,6 +3,7 @@ package informationsource
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInfo
 func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	tokenProfiles, profilesError := getJson[[]dexScreenerTokenProfileWire](executionContext,
+	tokenProfiles, profilesError := utilities.GetJson[[]dexScreenerTokenProfileWire](executionContext,
 		dexScreenerTokenProfileInformationSourceProxy.httpClient,
 		dexScreenerTokenProfileInformationSourceProxy.baseUrl+"/token-profiles/latest/v1")
 	if profilesError != nil {
@@ -54,13 +55,14 @@ func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInfo
 		tokenAddresses := tokenAddressesByChain[chainID]
 		for batchStart := 0; batchStart < len(tokenAddresses); batchStart += dexScreenerAddressesPerLookup {
 			batch := tokenAddresses[batchStart:min(batchStart+dexScreenerAddressesPerLookup, len(tokenAddresses))]
-			pairs, pairsError := getJson[[]dexScreenerPairWire](executionContext,
+			pairs, pairsError := utilities.GetJson[[]dexScreenerPairWire](executionContext,
 				dexScreenerTokenProfileInformationSourceProxy.httpClient,
 				fmt.Sprintf("%s/tokens/v1/%s/%s", dexScreenerTokenProfileInformationSourceProxy.baseUrl, chainID, strings.Join(batch, ",")))
 			if pairsError != nil {
 				return nil, pairsError
 			}
 			for _, pair := range pairs {
+				// Matched without case only for lookup: EVM addresses vary in case, while Solana's never collide this way.
 				tokenKey := chainID + ":" + strings.ToLower(pair.BaseToken.Address)
 				earliestPair, known := earliestPairByToken[tokenKey]
 				if !known || (pair.PairCreatedAt > 0 && (earliestPair.PairCreatedAt == 0 || pair.PairCreatedAt < earliestPair.PairCreatedAt)) {
@@ -72,11 +74,12 @@ func (dexScreenerTokenProfileInformationSourceProxy *DexScreenerTokenProfileInfo
 
 	informationItems := []vo.InformationItemVo{}
 	for _, tokenProfile := range tokenProfiles {
-		tokenKey := tokenProfile.ChainID + ":" + strings.ToLower(tokenProfile.TokenAddress)
-		earliestPair, known := earliestPairByToken[tokenKey]
+		earliestPair, known := earliestPairByToken[tokenProfile.ChainID+":"+strings.ToLower(tokenProfile.TokenAddress)]
 		informationItem := vo.InformationItemVo{
 			SourceName:         dexScreenerTokenProfileInformationSourceProxy.SourceName(),
-			ExternalIdentifier: tokenKey,
+			ExternalIdentifier: tokenProfile.ChainID + ":" + tokenProfile.TokenAddress,
+			ChainID:            tokenProfile.ChainID,
+			ContractAddress:    tokenProfile.TokenAddress,
 			Title:              "New token profile on " + tokenProfile.ChainID,
 			Link:               tokenProfile.Url,
 		}

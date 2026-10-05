@@ -3,6 +3,7 @@ package informationsource
 import (
 	"context"
 	"fmt"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
 	"net/http"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
@@ -25,7 +26,7 @@ func (coinGeckoTrendingInformationSourceProxy *CoinGeckoTrendingInformationSourc
 func (coinGeckoTrendingInformationSourceProxy *CoinGeckoTrendingInformationSourceProxy) FetchInformationItems(
 	executionContext context.Context, itemLimit int,
 ) ([]vo.InformationItemVo, error) {
-	trending, fetchError := getJson[coinGeckoTrendingWire](executionContext,
+	trending, fetchError := utilities.GetJson[coinGeckoTrendingWire](executionContext,
 		coinGeckoTrendingInformationSourceProxy.httpClient,
 		coinGeckoTrendingInformationSourceProxy.baseUrl+"/api/v3/search/trending")
 	if fetchError != nil {

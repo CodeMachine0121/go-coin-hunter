@@ -98,7 +98,8 @@ flowchart TD
 - **Most likely next requirement:** 裁決切片讀「最新成功洞察輪次」的全部成功洞察；換模型或調思考深度；加一種素材（如社群熱度）。
 - **Where it lands:** 換模型 = 設定；換 AI 供應商 = 另一個 `ICoinInsightAnalystProxy` 實作；新素材 = `CoinInsightMaterialVo` 加欄位 + 新 proxy + 系統提示說明該欄位。
 - **Do not hardcode:** 模型、effort、並行與數量上限、來源網址；系統提示寫成常數以利快取（不得夾帶時間戳等變動內容）。
-- **Known debt / deferred:** 新聞以代號搜尋可能混入同名雜訊，交由 AI 判讀；OKX 沒有持倉歷史，持倉變化留空。
+- **Known debt / deferred:** 新聞以代號搜尋可能混入同名雜訊，交由 AI 判讀；OKX 沒有持倉歷史，持倉變化留空。探索、過濾、洞察三個 service 各自寫一段「建輪次 → 工作 → 失敗或結論」：三者的失敗語意不同（洞察與探索回錯、過濾在來源故障時回失敗輪次），硬抽成共用模組需要旗標而變淺；裁決切片若出現第四份相同語意時再收攏。
+- **Shared technical piece:** 所有輪次範圍路由的 `:pipelineRunId` 由 `utilities.PipelineRunIDFrom` 解讀，錯誤訊息為 `domains.ErrInvalidPipelineRunID`。
 
 ---
 

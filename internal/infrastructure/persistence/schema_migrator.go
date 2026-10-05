@@ -3,6 +3,8 @@ package persistence
 import (
 	"fmt"
 
+	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/entities"
+
 	"gorm.io/gorm"
 )
 
@@ -16,7 +18,12 @@ func NewSchemaMigrator(database *gorm.DB) *SchemaMigrator {
 }
 
 func (schemaMigrator *SchemaMigrator) Migrate() error {
-	if migrateError := schemaMigrator.database.AutoMigrate(); migrateError != nil {
+	if migrateError := schemaMigrator.database.AutoMigrate(
+		&entities.PipelineRun{},
+		&entities.InformationSourceOutcome{},
+		&entities.CoinIntelligence{},
+		&entities.CoinCandidate{},
+	); migrateError != nil {
 		return fmt.Errorf("auto migrate schema: %w", migrateError)
 	}
 

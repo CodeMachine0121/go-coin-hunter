@@ -23,16 +23,9 @@ func NewPipelineRunDomain(pipelineRun entities.PipelineRun) PipelineRunDomain {
 
 // ConcludeDiscovery: any source succeeding with candidates is success, without candidates is no data, and every source failing is failure.
 func (pipelineRunDomain PipelineRunDomain) ConcludeDiscovery(
-	informationSourceResults []vo.InformationSourceResultVo, coinCandidateCount int, finishedAt time.Time,
+	informationSourceResults InformationSourceResultsDomain, coinCandidateCount int, finishedAt time.Time,
 ) entities.PipelineRun {
-	anySourceSucceeded := false
-	for _, informationSourceResult := range informationSourceResults {
-		if informationSourceResult.Succeeded() {
-			anySourceSucceeded = true
-		}
-	}
-
-	if !anySourceSucceeded {
+	if !informationSourceResults.AnySourceSucceeded() {
 		return pipelineRunDomain.Fail(AllInformationSourcesFailedReason, finishedAt)
 	}
 

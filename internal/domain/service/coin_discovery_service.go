@@ -79,17 +79,9 @@ func (coinDiscoveryService *CoinDiscoveryService) DiscoverCoins(
 	}
 	waitGroup.Wait()
 
-	receivedAt := coinDiscoveryService.clockProxy.Now()
-	informationSourceOutcomes := make([]entities.InformationSourceOutcome, 0, len(informationSourceResults))
-	coinIntelligences := []entities.CoinIntelligence{}
-	for _, informationSourceResult := range informationSourceResults {
-		informationSourceOutcomes = append(informationSourceOutcomes,
-			informationSourceResult.ToInformationSourceOutcome(pipelineRun.ID))
-		for _, informationItem := range informationSourceResult.InformationItems {
-			coinIntelligences = append(coinIntelligences,
-				domains.NewInformationItemDomain(informationItem).CoinIntelligences(pipelineRun.ID, receivedAt)...)
-		}
-	}
+	informationSourceResultsDomain := domains.NewInformationSourceResultsDomain(informationSourceResults)
+	informationSourceOutcomes := informationSourceResultsDomain.InformationSourceOutcomes(pipelineRun.ID)
+	coinIntelligences := informationSourceResultsDomain.CoinIntelligences(pipelineRun.ID, coinDiscoveryService.clockProxy.Now())
 
 	coinCandidateSelection := domains.NewCoinCandidateSelectionDomain(coinDiscoveryService.discoveryPolicy)
 	coinCandidates, recordError := func() ([]entities.CoinCandidate, error) {
@@ -124,7 +116,7 @@ func (coinDiscoveryService *CoinDiscoveryService) DiscoverCoins(
 	}
 
 	concludedPipelineRun := domains.NewPipelineRunDomain(pipelineRun).ConcludeDiscovery(
-		informationSourceResults, len(coinCandidates), coinDiscoveryService.clockProxy.Now())
+		informationSourceResultsDomain, len(coinCandidates), coinDiscoveryService.clockProxy.Now())
 	if updateError := coinDiscoveryService.pipelineRunRepository.Update(executionContext, concludedPipelineRun); updateError != nil {
 		return dto.PipelineRunDto{}, fmt.Errorf("record discovery run conclusion: %w", updateError)
 	}

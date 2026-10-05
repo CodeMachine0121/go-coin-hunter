@@ -28,7 +28,7 @@ func TestConcludeDiscovery(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			pipelineRun := domains.NewPipelineRunDomain(entities.PipelineRun{ID: 1, Status: string(vo.PipelineRunStatusRunning)}).
-				ConcludeDiscovery(testCase.results, testCase.candidateCount, receivedAt)
+				ConcludeDiscovery(domains.NewInformationSourceResultsDomain(testCase.results), testCase.candidateCount, receivedAt)
 
 			assert.Equal(t, string(testCase.wantStatus), pipelineRun.Status)
 			assert.Equal(t, testCase.wantFailureReason, pipelineRun.FailureReason)

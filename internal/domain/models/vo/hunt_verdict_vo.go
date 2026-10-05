@@ -45,4 +45,6 @@ type HuntVerdictPolicyVo struct {
 	MaximumStopLossPercent     decimal.Decimal
 	MinimumTakeProfitPercent   decimal.Decimal
 	MaximumTakeProfitPercent   decimal.Decimal
+	// MaximumShortTakeProfitPercent keeps a short's take-profit price above zero: a price can fall at most to nothing.
+	MaximumShortTakeProfitPercent decimal.Decimal
 }

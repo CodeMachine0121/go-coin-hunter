@@ -125,6 +125,7 @@ func TestVerdictsOfRunRoute(t *testing.T) {
 		arrange    func(underTest verdictRoutesUnderTest)
 		wantStatus int
 		wantError  string
+		wantBody   string
 	}{
 		{name: "a non-numeric run", path: "/pipeline-runs/abc/coin-verdicts", arrange: func(verdictRoutesUnderTest) {},
 			wantStatus: http.StatusBadRequest, wantError: "輪次編號必須是正整數"},
@@ -135,10 +136,10 @@ func TestVerdictsOfRunRoute(t *testing.T) {
 			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9}, nil)
 			underTest.coinVerdictRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, errors.New("disk"))
 		}, wantStatus: http.StatusInternalServerError},
-		{name: "a known run", path: "/pipeline-runs/9/coin-verdicts", arrange: func(underTest verdictRoutesUnderTest) {
-			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9}, nil)
+		{name: "a run of another step has no verdicts", path: "/pipeline-runs/9/coin-verdicts", arrange: func(underTest verdictRoutesUnderTest) {
+			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9, Step: string(vo.PipelineRunStepInsight)}, nil)
 			underTest.coinVerdictRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinVerdict{}, nil)
-		}, wantStatus: http.StatusOK},
+		}, wantStatus: http.StatusOK, wantBody: `[]`},
 	}
 
 	for _, testCase := range testCases {
@@ -151,6 +152,9 @@ func TestVerdictsOfRunRoute(t *testing.T) {
 			assert.Equal(t, testCase.wantStatus, recorder.Code)
 			if testCase.wantError != "" {
 				assert.Equal(t, testCase.wantError, errorMessageOf(t, recorder))
+			}
+			if testCase.wantBody != "" {
+				assert.JSONEq(t, testCase.wantBody, recorder.Body.String())
 			}
 		})
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/config"
+	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/analysis"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/infrastructure/marketdata"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,6 +31,17 @@ func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
 	assert.Equal(t, "50", huntVerdictPolicy.MaximumStopLossPercent.String())
 	assert.Equal(t, "1", huntVerdictPolicy.MinimumTakeProfitPercent.String())
 	assert.Equal(t, "200", huntVerdictPolicy.MaximumTakeProfitPercent.String())
+	assert.Equal(t, "90", huntVerdictPolicy.MaximumShortTakeProfitPercent.String())
+}
+
+func TestEachClaudeCapabilityKeepsItsOwnSettings(t *testing.T) {
+	insightSettings, verdictSettings := claudeModelSettingsFor(config.ApplicationConfig{
+		Insight: config.InsightConfig{Model: "insight-model", Effort: "low", AnalysisTimeout: 120 * time.Second},
+		Verdict: config.VerdictConfig{Model: "verdict-model", Effort: "high", SynthesisTimeout: 180 * time.Second},
+	})
+
+	assert.Equal(t, analysis.ClaudeModelSettings{Model: "insight-model", Effort: "low", RequestTimeout: 120 * time.Second}, insightSettings)
+	assert.Equal(t, analysis.ClaudeModelSettings{Model: "verdict-model", Effort: "high", RequestTimeout: 180 * time.Second}, verdictSettings)
 }
 
 func TestInsightShowsIntelligenceFromTheDiscoveryWindow(t *testing.T) {

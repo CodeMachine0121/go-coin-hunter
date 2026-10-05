@@ -14,7 +14,7 @@ import (
 func verdictPolicy() vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{MinimumLeverage: 1, MaximumLeverage: 5, MaximumPositionSizePercent: decimal.NewFromInt(10),
 		MinimumStopLossPercent: decimal.NewFromInt(1), MaximumStopLossPercent: decimal.NewFromInt(50),
-		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200)}
+		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200), MaximumShortTakeProfitPercent: decimal.NewFromInt(90)}
 }
 
 func pricedMaterial(coinSymbol string, lastPrice string) vo.HuntVerdictMaterialVo {
@@ -52,12 +52,28 @@ func TestHuntVerdictClampsTheNumbers(t *testing.T) {
 	assert.Equal(t, "無明顯矛盾", coinVerdict.ConflictResolution)
 	assert.Equal(t, uint(3), coinVerdict.PipelineRunID)
 
-	low := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "short", -5, 0, "-2", "60", "500"))
+	low := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "long", -5, 0, "-2", "60", "500"))
 	assert.Equal(t, 0, low.Confidence)
 	assert.Equal(t, 1, low.Leverage)
 	assert.Equal(t, "0", low.PositionSizeRatio.String())
 	assert.Equal(t, "0.5", text(low.StopLossRatio))
 	assert.Equal(t, "2", text(low.TakeProfitRatio))
+}
+
+func TestHuntVerdictWidensATakeProfitUnderOnePercent(t *testing.T) {
+	coinVerdict := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "long", 70, 3, "5", "10", "0.2"))
+
+	assert.Equal(t, "0.01", text(coinVerdict.TakeProfitRatio))
+	assert.Equal(t, "0.0101", text(coinVerdict.TakeProfitPrice))
+}
+
+func TestHuntVerdictKeepsAShortTakeProfitAboveZero(t *testing.T) {
+	coinVerdict := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "short", 70, 3, "5", "10", "150"))
+
+	assert.Equal(t, "0.9", text(coinVerdict.TakeProfitRatio))
+	assert.Equal(t, "0.001", text(coinVerdict.TakeProfitPrice))
+	longKeepsTheWiderRange := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "long", 70, 3, "5", "10", "150"))
+	assert.Equal(t, "1.5", text(longKeepsTheWiderRange.TakeProfitRatio))
 }
 
 func TestHuntVerdictPricesFollowTheDirection(t *testing.T) {

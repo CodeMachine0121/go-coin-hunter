@@ -121,17 +121,24 @@ func coinInsightServiceFor(
 	)
 }
 
+// claudeModelSettingsFor gives each Claude capability its own model, effort and deadline.
+func claudeModelSettingsFor(applicationConfig config.ApplicationConfig) (analysis.ClaudeModelSettings, analysis.ClaudeModelSettings) {
+	return analysis.ClaudeModelSettings{Model: applicationConfig.Insight.Model, Effort: applicationConfig.Insight.Effort, RequestTimeout: applicationConfig.Insight.AnalysisTimeout},
+		analysis.ClaudeModelSettings{Model: applicationConfig.Verdict.Model, Effort: applicationConfig.Verdict.Effort, RequestTimeout: applicationConfig.Verdict.SynthesisTimeout}
+}
+
 // huntVerdictPolicyFor holds the safe ranges every verdict is clamped into: leverage 1-5, position up to 10%,
-// stop loss 1-50% and take profit 1-200% of the latest price.
+// stop loss 1-50% and take profit 1-200% of the latest price, at most 90% for a short.
 func huntVerdictPolicyFor() vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{
-		MinimumLeverage:            1,
-		MaximumLeverage:            5,
-		MaximumPositionSizePercent: decimal.NewFromInt(10),
-		MinimumStopLossPercent:     decimal.NewFromInt(1),
-		MaximumStopLossPercent:     decimal.NewFromInt(50),
-		MinimumTakeProfitPercent:   decimal.NewFromInt(1),
-		MaximumTakeProfitPercent:   decimal.NewFromInt(200),
+		MinimumLeverage:               1,
+		MaximumLeverage:               5,
+		MaximumPositionSizePercent:    decimal.NewFromInt(10),
+		MinimumStopLossPercent:        decimal.NewFromInt(1),
+		MaximumStopLossPercent:        decimal.NewFromInt(50),
+		MinimumTakeProfitPercent:      decimal.NewFromInt(1),
+		MaximumTakeProfitPercent:      decimal.NewFromInt(200),
+		MaximumShortTakeProfitPercent: decimal.NewFromInt(90),
 	}
 }
 
@@ -148,9 +155,9 @@ func applicationsFor(database *gorm.DB, applicationConfig config.ApplicationConf
 	clockProxy := clock.NewSystemClockProxy()
 	pipelineRunRepository := persistence.NewPipelineRunRepository(database)
 	// One way out to Claude for both the insight analyst and the chief investment officer.
+	insightModelSettings, verdictModelSettings := claudeModelSettingsFor(applicationConfig)
 	claudeAnalysisProxy := analysis.NewClaudeAnalysisProxy(applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
-		analysis.ClaudeModelSettings{Model: applicationConfig.Insight.Model, Effort: applicationConfig.Insight.Effort, RequestTimeout: applicationConfig.Insight.AnalysisTimeout},
-		analysis.ClaudeModelSettings{Model: applicationConfig.Verdict.Model, Effort: applicationConfig.Verdict.Effort, RequestTimeout: applicationConfig.Verdict.SynthesisTimeout})
+		insightModelSettings, verdictModelSettings)
 	coinCandidateRepository := persistence.NewCoinCandidateRepository(database)
 
 	return applications{

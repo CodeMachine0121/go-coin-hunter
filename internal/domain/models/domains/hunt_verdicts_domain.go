@@ -76,7 +76,11 @@ func (huntVerdictsDomain HuntVerdictsDomain) ToCoinVerdicts(pipelineRunID uint) 
 		}
 
 		stopLossRatio := decimal.Max(policy.MinimumStopLossPercent, decimal.Min(policy.MaximumStopLossPercent, answer.StopLossPercent)).Div(percentPerUnit)
-		takeProfitRatio := decimal.Max(policy.MinimumTakeProfitPercent, decimal.Min(policy.MaximumTakeProfitPercent, answer.TakeProfitPercent)).Div(percentPerUnit)
+		maximumTakeProfitPercent := policy.MaximumTakeProfitPercent
+		if action == vo.HuntActionShort {
+			maximumTakeProfitPercent = decimal.Min(maximumTakeProfitPercent, policy.MaximumShortTakeProfitPercent)
+		}
+		takeProfitRatio := decimal.Max(policy.MinimumTakeProfitPercent, decimal.Min(maximumTakeProfitPercent, answer.TakeProfitPercent)).Div(percentPerUnit)
 		stopLossPrice := lastPrice.Mul(decimal.NewFromInt(1).Sub(stopLossRatio))
 		takeProfitPrice := lastPrice.Mul(decimal.NewFromInt(1).Add(takeProfitRatio))
 		if action == vo.HuntActionShort {

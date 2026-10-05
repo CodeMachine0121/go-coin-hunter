@@ -66,12 +66,15 @@ func TestCoinIntelligencesRouteStatus(t *testing.T) {
 		path       string
 		arrange    func(underTest discoveryRoutesUnderTest)
 		wantStatus int
+		wantError  string
 	}{
-		{name: "a non-numeric run", path: "/pipeline-runs/abc/coin-intelligences", arrange: func(discoveryRoutesUnderTest) {}, wantStatus: http.StatusBadRequest},
-		{name: "run zero", path: "/pipeline-runs/0/coin-intelligences", arrange: func(discoveryRoutesUnderTest) {}, wantStatus: http.StatusBadRequest},
+		{name: "a non-numeric run", path: "/pipeline-runs/abc/coin-intelligences", arrange: func(discoveryRoutesUnderTest) {},
+			wantStatus: http.StatusBadRequest, wantError: "輪次編號必須是正整數"},
+		{name: "run zero", path: "/pipeline-runs/0/coin-intelligences", arrange: func(discoveryRoutesUnderTest) {},
+			wantStatus: http.StatusBadRequest, wantError: "輪次編號必須是正整數"},
 		{name: "an unknown run", path: "/pipeline-runs/9/coin-intelligences", arrange: func(underTest discoveryRoutesUnderTest) {
 			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{}, domains.ErrPipelineRunNotFound)
-		}, wantStatus: http.StatusNotFound},
+		}, wantStatus: http.StatusNotFound, wantError: "找不到這個輪次"},
 		{name: "storage failing", path: "/pipeline-runs/9/coin-intelligences", arrange: func(underTest discoveryRoutesUnderTest) {
 			underTest.pipelineRunRepository.EXPECT().FindOne(gomock.Any(), uint(9)).Return(entities.PipelineRun{ID: 9}, nil)
 			underTest.coinIntelligenceRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, errors.New("disk"))
@@ -87,7 +90,14 @@ func TestCoinIntelligencesRouteStatus(t *testing.T) {
 			underTest := newDiscoveryRoutesUnderTest(t)
 			testCase.arrange(underTest)
 
-			assert.Equal(t, testCase.wantStatus, underTest.request(http.MethodGet, testCase.path).Code)
+			recorder := underTest.request(http.MethodGet, testCase.path)
+
+			assert.Equal(t, testCase.wantStatus, recorder.Code)
+			if testCase.wantError != "" {
+				body := map[string]string{}
+				assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+				assert.Equal(t, testCase.wantError, body["error"])
+			}
 		})
 	}
 }

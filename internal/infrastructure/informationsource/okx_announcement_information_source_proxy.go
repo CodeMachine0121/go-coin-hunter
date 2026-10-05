@@ -36,6 +36,9 @@ func (okxAnnouncementInformationSourceProxy *OkxAnnouncementInformationSourcePro
 	if announcementList.Code != "0" {
 		return nil, fmt.Errorf("okx announcements answered %s: %s", announcementList.Code, announcementList.Message)
 	}
+	if announcementList.Data == nil {
+		return nil, fmt.Errorf("okx announcements answered without an announcement list")
+	}
 
 	informationItems := []vo.InformationItemVo{}
 	for _, page := range announcementList.Data {

@@ -39,6 +39,9 @@ func (bybitAnnouncementInformationSourceProxy *BybitAnnouncementInformationSourc
 	if *announcementList.ReturnCode != 0 {
 		return nil, fmt.Errorf("bybit announcements answered %d: %s", *announcementList.ReturnCode, announcementList.ReturnMessage)
 	}
+	if announcementList.Result.List == nil {
+		return nil, fmt.Errorf("bybit announcements answered without an announcement list")
+	}
 
 	informationItems := []vo.InformationItemVo{}
 	for _, announcement := range announcementList.Result.List {

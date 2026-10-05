@@ -39,6 +39,9 @@ func (binanceAnnouncementInformationSourceProxy *BinanceAnnouncementInformationS
 	if announcementList.Code != "000000" || len(announcementList.Data.Catalogs) == 0 {
 		return nil, fmt.Errorf("binance announcements answered code %q without a catalog", announcementList.Code)
 	}
+	if announcementList.Data.Catalogs[0].Articles == nil {
+		return nil, fmt.Errorf("binance announcements answered a catalog without an article list")
+	}
 
 	informationItems := []vo.InformationItemVo{}
 	for _, article := range announcementList.Data.Catalogs[0].Articles {

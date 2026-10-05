@@ -417,7 +417,7 @@ func failingDiscoveryStorage(t *testing.T, failingStep string) (*application.Coi
 	pipelineRunRepository.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, pipelineRun entities.PipelineRun) error {
 		*lastUpdate = pipelineRun
 		return stepError("update")
-	}).AnyTimes()
+	}).Times(1)
 	outcomeRepository := mocks.NewMockIInformationSourceOutcomeRepository(controller)
 	outcomeRepository.EXPECT().CreateAll(gomock.Any(), gomock.Any()).Return(stepError("outcomes")).AnyTimes()
 	coinIntelligenceRepository := mocks.NewMockICoinIntelligenceRepository(controller)
@@ -450,12 +450,15 @@ func TestDiscoverCoinsMarksTheRunFailedWhenSavingTheRoundFails(t *testing.T) {
 	}
 }
 
+// The run is left running for the restart sweep: the failed conclusion is the only write attempted.
 func TestDiscoverCoinsFailsWhenTheConclusionCannotBeRecorded(t *testing.T) {
-	coinDiscoveryApplication, _ := failingDiscoveryStorage(t, "update")
+	coinDiscoveryApplication, lastUpdate := failingDiscoveryStorage(t, "update")
 
 	_, discoverError := coinDiscoveryApplication.DiscoverCoinsManually(context.Background())
 
 	assert.ErrorContains(t, discoverError, "disk full")
+	assert.Equal(t, string(vo.PipelineRunStatusNoData), lastUpdate.Status)
+	assert.Empty(t, lastUpdate.FailureReason)
 }
 
 func TestDiscoverCoinsReportsBothFailuresWhenTheFailureCannotBeRecorded(t *testing.T) {

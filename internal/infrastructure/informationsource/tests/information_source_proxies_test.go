@@ -180,6 +180,18 @@ func TestInformationSourceProxiesFailOnBadAnswers(t *testing.T) {
 		routes   map[string]string
 		newProxy func(baseUrl string) domaininterface.IInformationSourceProxy
 	}{
+		{name: "bybit answering ok without a list", routes: map[string]string{"/v5/announcements/index": `{"retCode":0,"retMsg":"OK"}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewBybitAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
+		{name: "okx answering ok without a list", routes: map[string]string{"/api/v5/support/announcements": `{"code":"0"}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewOkxAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
+		{name: "binance answering a catalog without articles", routes: map[string]string{"/bapi/composite/v1/public/cms/article/list/query": `{"code":"000000","data":{"catalogs":[{}]}}`},
+			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
+				return informationsource.NewBinanceAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
+			}},
 		{name: "bybit answering without a return code", routes: map[string]string{"/v5/announcements/index": `{}`},
 			newProxy: func(baseUrl string) domaininterface.IInformationSourceProxy {
 				return informationsource.NewBybitAnnouncementInformationSourceProxy(http.DefaultClient, baseUrl)
@@ -275,4 +287,29 @@ func TestInformationSourceProxiesNameThemselves(t *testing.T) {
 		informationsource.NewCoinGeckoTrendingInformationSourceProxy(nil, "").SourceName(),
 		informationsource.NewDexScreenerTokenProfileInformationSourceProxy(nil, "").SourceName(),
 	})
+}
+
+func TestInformationSourceProxiesReportAnExpiredDeadlineAsSuch(t *testing.T) {
+	stalled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-stalled }))
+	t.Cleanup(func() {
+		close(stalled)
+		server.Close()
+	})
+	executionContext, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, fetchError := informationsource.NewCoinGeckoTrendingInformationSourceProxy(http.DefaultClient, server.URL).
+		FetchInformationItems(executionContext, 50)
+
+	assert.ErrorIs(t, fetchError, context.DeadlineExceeded)
+}
+
+func TestInformationSourceProxiesAcceptAnEmptyList(t *testing.T) {
+	informationItems, fetchError := informationsource.NewBybitAnnouncementInformationSourceProxy(http.DefaultClient,
+		serveRoutes(t, map[string]string{"/v5/announcements/index": `{"retCode":0,"result":{"list":[]}}`})).
+		FetchInformationItems(context.Background(), 50)
+
+	require.NoError(t, fetchError)
+	assert.Empty(t, informationItems)
 }

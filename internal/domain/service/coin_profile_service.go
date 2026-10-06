@@ -25,6 +25,7 @@ type CoinProfileService struct {
 	tokenSecurityProxy              domaininterface.ITokenSecurityProxy
 	perpetualContractListingProxies []domaininterface.IPerpetualContractListingProxy
 	tokenUnlockScheduleProxy        domaininterface.ITokenUnlockScheduleProxy
+	perpetualMarketStructureService *PerpetualMarketStructureService
 	coinProfileTiming               vo.CoinProfileTimingVo
 }
 
@@ -34,6 +35,7 @@ func NewCoinProfileService(
 	tokenSecurityProxy domaininterface.ITokenSecurityProxy,
 	perpetualContractListingProxies []domaininterface.IPerpetualContractListingProxy,
 	tokenUnlockScheduleProxy domaininterface.ITokenUnlockScheduleProxy,
+	perpetualMarketStructureService *PerpetualMarketStructureService,
 	coinProfileTiming vo.CoinProfileTimingVo,
 ) *CoinProfileService {
 	return &CoinProfileService{
@@ -42,6 +44,7 @@ func NewCoinProfileService(
 		tokenSecurityProxy:              tokenSecurityProxy,
 		perpetualContractListingProxies: perpetualContractListingProxies,
 		tokenUnlockScheduleProxy:        tokenUnlockScheduleProxy,
+		perpetualMarketStructureService: perpetualMarketStructureService,
 		coinProfileTiming:               coinProfileTiming,
 	}
 }
@@ -159,6 +162,19 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		}
 		coinProfiles = append(coinProfiles, coinProfile)
 	}
+
+	// Market structure: only a coin with a perpetual has one, and each coin is asked at once. An exchange that cannot
+	// answer is no data for the momentum rules rather than a failed round: it is per coin, not the whole round's footing.
+	for index := range coinProfiles {
+		if len(coinProfiles[index].PerpetualContractExchanges) == 0 {
+			continue
+		}
+		waitGroup.Go(func() {
+			coinProfiles[index].MarketStructure = coinProfileService.perpetualMarketStructureService.FindMarketStructure(
+				baseContext, coinProfiles[index].CoinSymbol)
+		})
+	}
+	waitGroup.Wait()
 
 	securityLookupCount := 0
 	for _, coinProfile := range coinProfiles {

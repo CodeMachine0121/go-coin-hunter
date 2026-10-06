@@ -46,6 +46,9 @@ func filterHandlersFor(filteringConfig config.FilteringConfig) []domaininterface
 		handler.NewCirculatingRatioFilterHandler(filteringConfig.MinimumCirculatingRatio),
 		handler.NewUnlockScheduleFilterHandler(filteringConfig.UnlockLookahead, filteringConfig.MaximumUnlockRatioOfCirculating),
 		handler.NewPerpetualContractListingFilterHandler(),
+		handler.NewPriceChangeFilterHandler(filteringConfig.MinimumPriceChangeRatio, filteringConfig.MaximumPriceChangeRatio),
+		handler.NewOpenInterestChangeFilterHandler(filteringConfig.MinimumOpenInterestChangeRatio),
+		handler.NewFundingRateOverheatFilterHandler(filteringConfig.MaximumFundingRate),
 	}
 }
 
@@ -67,6 +70,8 @@ func coinProfileServiceFor(database *gorm.DB, applicationConfig config.Applicati
 			marketdata.NewOkxPerpetualContractListingProxy(httpClient, applicationConfig.Discovery.OkxBaseUrl),
 		},
 		marketdata.NewDefiLlamaTokenUnlockScheduleProxy(httpClient, applicationConfig.Filtering.DefiLlamaDatasetsBaseUrl),
+		service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
+			applicationConfig.Filtering.MarketStructureRequestTimeout),
 		vo.CoinProfileTimingVo{
 			SourceRequestTimeout:    applicationConfig.Filtering.SourceRequestTimeout,
 			RoundBaseBudget:         applicationConfig.Filtering.RoundBaseBudget,
@@ -75,7 +80,7 @@ func coinProfileServiceFor(database *gorm.DB, applicationConfig config.Applicati
 	)
 }
 
-// perpetualMarketStructureProxiesFor lists the exchanges in the order the insight rules prefer: Binance, Bybit, OKX.
+// perpetualMarketStructureProxiesFor lists the exchanges in the order the momentum and insight rules prefer: Binance, Bybit, OKX.
 func perpetualMarketStructureProxiesFor(httpClient *http.Client, discoveryConfig config.DiscoveryConfig) []domaininterface.IPerpetualMarketStructureProxy {
 	return []domaininterface.IPerpetualMarketStructureProxy{
 		marketdata.NewBinancePerpetualMarketStructureProxy(httpClient, discoveryConfig.BinanceFuturesUrl),

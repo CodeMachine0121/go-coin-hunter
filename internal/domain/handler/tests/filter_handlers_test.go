@@ -143,3 +143,55 @@ func TestPerpetualContractListingFilterHandler(t *testing.T) {
 		{name: "no exchange is rejected", coinProfile: vo.CoinProfileVo{}, wantOutcome: vo.FilterOutcomeRejected, wantReason: "幣安、Bybit、OKX 皆無 USDT 永續合約"},
 	})
 }
+
+func withMarketStructure(marketStructure vo.PerpetualMarketStructureVo) vo.CoinProfileVo {
+	return vo.CoinProfileVo{MarketStructure: &marketStructure}
+}
+
+func TestPriceChangeFilterHandler(t *testing.T) {
+	runHandlerCases(t, handler.NewPriceChangeFilterHandler(decimal.RequireFromString("-0.1"), decimal.RequireFromString("0.6")), "priceChange", []handlerCase{
+		{name: "a moderate rise passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{PriceChangeRatio24h: amount("0.12")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "a fall of exactly ten percent passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{PriceChangeRatio24h: amount("-0.1")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "a fall over ten percent is rejected", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{PriceChangeRatio24h: amount("-0.105")}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "24 小時跌幅 10.5% 超過下限 10%"},
+		{name: "a rise of exactly sixty percent passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{PriceChangeRatio24h: amount("0.6")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "a rise over sixty percent is rejected", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{PriceChangeRatio24h: amount("0.61")}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "24 小時漲幅 61% 超過上限 60%"},
+		{name: "no market structure is no data", coinProfile: vo.CoinProfileVo{}, wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到永續合約市場結構"},
+		{name: "no price change is no data", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{}),
+			wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到 24 小時漲跌幅"},
+	})
+}
+
+func TestOpenInterestChangeFilterHandler(t *testing.T) {
+	runHandlerCases(t, handler.NewOpenInterestChangeFilterHandler(decimal.RequireFromString("-0.1")), "openInterestChange", []handlerCase{
+		{name: "growing open interest passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{OpenInterestChangeRatio24h: amount("0.25")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "a drop of exactly ten percent passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{OpenInterestChangeRatio24h: amount("-0.1")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "a drop over ten percent is rejected", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{OpenInterestChangeRatio24h: amount("-0.11")}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "持倉量 24 小時減少 11% 超過下限 10%"},
+		{name: "no market structure is no data", coinProfile: vo.CoinProfileVo{}, wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到永續合約市場結構"},
+		{name: "no open interest change is no data", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{}),
+			wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到持倉量 24 小時變化"},
+	})
+}
+
+func TestFundingRateOverheatFilterHandler(t *testing.T) {
+	runHandlerCases(t, handler.NewFundingRateOverheatFilterHandler(decimal.RequireFromString("0.001")), "fundingRateOverheat", []handlerCase{
+		{name: "an ordinary rate passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.0001")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "exactly the ceiling passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.001")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "over the ceiling is rejected", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.0011")}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "資金費率 0.11% 高於上限 0.1%"},
+		{name: "a negative rate passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("-0.003")}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "no market structure is no data", coinProfile: vo.CoinProfileVo{}, wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到永續合約市場結構"},
+		{name: "no funding rate is no data", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{}),
+			wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到資金費率"},
+	})
+}

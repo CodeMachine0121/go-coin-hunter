@@ -15,4 +15,6 @@ type CoinProfileVo struct {
 	PerpetualContractExchanges    []string
 	UnlockScheduleKnown           bool
 	UnlockEvents                  []TokenUnlockEventVo
+	// MarketStructure is the coin's perpetual as it trades now, or nil when no exchange answers for it.
+	MarketStructure *PerpetualMarketStructureVo
 }

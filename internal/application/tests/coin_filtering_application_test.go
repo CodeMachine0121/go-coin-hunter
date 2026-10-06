@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,9 +54,15 @@ type coinFilteringUnderTest struct {
 	bybitListing             *mocks.MockIPerpetualContractListingProxy
 	okxListing               *mocks.MockIPerpetualContractListingProxy
 	tokenUnlocks             *mocks.MockITokenUnlockScheduleProxy
-	createdPipelineRun       *entities.PipelineRun
-	lastPipelineRunUpdate    *entities.PipelineRun
-	savedCoinFilterResults   []entities.CoinFilterResult
+	// marketStructures is what the exchange answers for each coin's perpetual; a coin absent here is not found.
+	marketStructures       map[string]vo.PerpetualMarketStructureVo
+	marketStructureService *service.PerpetualMarketStructureService
+	// queriedMarketStructures records which coins the exchange was asked about; lookups run at once, hence the lock.
+	queriedMarketStructures     []string
+	queriedMarketStructuresLock sync.Mutex
+	createdPipelineRun          *entities.PipelineRun
+	lastPipelineRunUpdate       *entities.PipelineRun
+	savedCoinFilterResults      []entities.CoinFilterResult
 }
 
 func defaultFilterHandlers() []domaininterface.ICoinCandidateFilterHandler {
@@ -66,6 +73,9 @@ func defaultFilterHandlers() []domaininterface.ICoinCandidateFilterHandler {
 		handler.NewCirculatingRatioFilterHandler(decimal.RequireFromString("0.2")),
 		handler.NewUnlockScheduleFilterHandler(14*24*time.Hour, decimal.RequireFromString("0.05")),
 		handler.NewPerpetualContractListingFilterHandler(),
+		handler.NewPriceChangeFilterHandler(decimal.RequireFromString("-0.1"), decimal.RequireFromString("0.6")),
+		handler.NewOpenInterestChangeFilterHandler(decimal.RequireFromString("-0.1")),
+		handler.NewFundingRateOverheatFilterHandler(decimal.RequireFromString("0.001")),
 	}
 }
 
@@ -85,7 +95,19 @@ func newCoinFilteringUnderTest(t *testing.T, candidateSymbols ...string) *coinFi
 		bybitListing:            mocks.NewMockIPerpetualContractListingProxy(controller),
 		okxListing:              mocks.NewMockIPerpetualContractListingProxy(controller),
 		tokenUnlocks:            mocks.NewMockITokenUnlockScheduleProxy(controller),
+		marketStructures:        map[string]vo.PerpetualMarketStructureVo{},
 	}
+	marketStructureProxy := mocks.NewMockIPerpetualMarketStructureProxy(controller)
+	marketStructureProxy.EXPECT().FindMarketStructure(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, coinSymbol string) (vo.PerpetualMarketStructureVo, bool, error) {
+			underTest.queriedMarketStructuresLock.Lock()
+			underTest.queriedMarketStructures = append(underTest.queriedMarketStructures, coinSymbol)
+			underTest.queriedMarketStructuresLock.Unlock()
+			marketStructure, found := underTest.marketStructures[coinSymbol]
+			return marketStructure, found, nil
+		}).AnyTimes()
+	underTest.marketStructureService = service.NewPerpetualMarketStructureService(
+		[]domaininterface.IPerpetualMarketStructureProxy{marketStructureProxy}, time.Second)
 	coinCandidates := []entities.CoinCandidate{}
 	for _, candidateSymbol := range candidateSymbols {
 		coinCandidates = append(coinCandidates, entities.CoinCandidate{PipelineRunID: latestDiscoveryRunID, CoinSymbol: candidateSymbol})
@@ -133,7 +155,7 @@ func newCoinFilteringUnderTest(t *testing.T, candidateSymbols ...string) *coinFi
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData},
 			underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, profileTiming(time.Second)),
+			underTest.tokenUnlocks, underTest.marketStructureService, profileTiming(time.Second)),
 		defaultFilterHandlers(), clockProxy))
 
 	return underTest
@@ -206,7 +228,7 @@ func TestFilterCoinCandidatesKeepsOnlyCoinsNoRuleRejects(t *testing.T) {
 	grass := underTest.savedResult(t, "GRASS")
 	assert.True(t, grass.IsKept)
 	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "unlockSchedule", Outcome: "noData", Reason: "查不到解鎖時程"}, verdictOf(grass, "unlockSchedule"))
-	assert.Len(t, grass.Verdicts, 6)
+	assert.Len(t, grass.Verdicts, 9)
 }
 
 func TestFilterCoinCandidatesGathersProfilesFromTheRightSources(t *testing.T) {
@@ -225,7 +247,7 @@ func TestFilterCoinCandidatesGathersProfilesFromTheRightSources(t *testing.T) {
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData},
 			underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, profileTiming(time.Second)),
+			underTest.tokenUnlocks, underTest.marketStructureService, profileTiming(time.Second)),
 		defaultFilterHandlers(), clockProxy))
 
 	baseOnly := healthyMarketData("aerodrome-finance", vo.TokenAddressVo{ChainID: vo.ChainBase, Address: "0xaero"})
@@ -359,7 +381,7 @@ func TestFilterCoinCandidatesSurfacesStorageFailures(t *testing.T) {
 			service.NewCoinProfileService(underTest.coinIntelligences,
 				[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 				[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-				underTest.tokenUnlocks, profileTiming(time.Second)),
+				underTest.tokenUnlocks, underTest.marketStructureService, profileTiming(time.Second)),
 			defaultFilterHandlers(), clockProxy))
 
 		_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
@@ -412,7 +434,7 @@ func TestFilterCoinCandidatesSurfacesStorageFailures(t *testing.T) {
 			clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
 			coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
 				pipelineRuns, candidates, results,
-				service.NewCoinProfileService(intelligences, nil, nil, nil, nil, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: time.Minute}), nil, clockProxy))
+				service.NewCoinProfileService(intelligences, nil, nil, nil, nil, nil, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: time.Minute}), nil, clockProxy))
 
 			_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
 
@@ -523,7 +545,7 @@ func TestFilterCoinCandidatesReportsATimedOutSourceAsAConnectionTimeout(t *testi
 		service.NewCoinProfileService(underTest.coinIntelligences,
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, profileTiming(50*time.Millisecond)),
+			underTest.tokenUnlocks, underTest.marketStructureService, profileTiming(50*time.Millisecond)),
 		defaultFilterHandlers(), clockProxy))
 
 	pipelineRun, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
@@ -547,7 +569,7 @@ func TestFilterCoinCandidatesChecksOnlyTheDeclaredContract(t *testing.T) {
 		service.NewCoinProfileService(coinIntelligences,
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, profileTiming(time.Second)),
+			underTest.tokenUnlocks, underTest.marketStructureService, profileTiming(time.Second)),
 		defaultFilterHandlers(), clockProxy))
 	bscContract := vo.TokenAddressVo{ChainID: vo.ChainBsc, Address: "0xbsc"}
 	ethereumContract := vo.TokenAddressVo{ChainID: vo.ChainEthereum, Address: "0xeth"}
@@ -598,7 +620,7 @@ func TestFilterCoinCandidatesStaysInsideTheRoundBudget(t *testing.T) {
 		service.NewCoinProfileService(underTest.coinIntelligences,
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: 100 * time.Millisecond, SecurityLookupAllowance: 50 * time.Millisecond}),
+			underTest.tokenUnlocks, underTest.marketStructureService, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: 100 * time.Millisecond, SecurityLookupAllowance: 50 * time.Millisecond}),
 		defaultFilterHandlers(), clockProxy))
 	startedAt := time.Now()
 
@@ -608,4 +630,35 @@ func TestFilterCoinCandidatesStaysInsideTheRoundBudget(t *testing.T) {
 	assert.Less(t, time.Since(startedAt), 300*time.Millisecond)
 	assert.Equal(t, string(vo.PipelineRunStatusFailed), pipelineRun.Status)
 	assert.Equal(t, "資料來源無法取得：goPlusTokenSecurity（連線逾時）", pipelineRun.FailureReason)
+}
+
+func TestFilterCoinCandidatesJudgesMomentumFromThePerpetualAsItTradesNow(t *testing.T) {
+	fallingRatio := decimal.RequireFromString("-0.2")
+	risingRatio := decimal.RequireFromString("0.12")
+	underTest := newCoinFilteringUnderTest(t, "PENGU", "STRK", "ARB")
+	underTest.answerMarketData(map[string]vo.CoinMarketDataVo{
+		"PENGU": healthyMarketData("pengu"), "STRK": healthyMarketData("strk"), "ARB": healthyMarketData("arb"),
+	}, map[string]vo.CoinMarketDataVo{})
+	underTest.answerListings(map[string]bool{"PENGU": true, "STRK": true}, map[string]bool{}, map[string]bool{})
+	underTest.answerUnlocks(map[string][]vo.TokenUnlockEventVo{})
+	underTest.marketStructures["PENGU"] = vo.PerpetualMarketStructureVo{ExchangeName: "幣安", PriceChangeRatio24h: &fallingRatio}
+	underTest.marketStructures["STRK"] = vo.PerpetualMarketStructureVo{ExchangeName: "幣安", PriceChangeRatio24h: &risingRatio}
+
+	pipelineRun, filterError := underTest.coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
+
+	require.NoError(t, filterError)
+	assert.Equal(t, string(vo.PipelineRunStatusSucceeded), pipelineRun.Status)
+	pengu := underTest.savedResult(t, "PENGU")
+	assert.False(t, pengu.IsKept)
+	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "priceChange", Outcome: "rejected", Reason: "24 小時跌幅 20% 超過下限 10%"},
+		verdictOf(pengu, "priceChange"))
+	strk := underTest.savedResult(t, "STRK")
+	assert.True(t, strk.IsKept)
+	assert.Equal(t, "passed", verdictOf(strk, "priceChange").Outcome)
+	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "fundingRateOverheat", Outcome: "noData", Reason: "查不到資金費率"},
+		verdictOf(strk, "fundingRateOverheat"))
+	// ARB has no perpetual, so there is no market structure to ask for.
+	assert.ElementsMatch(t, []string{"PENGU", "STRK"}, underTest.queriedMarketStructures)
+	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "priceChange", Outcome: "noData", Reason: "查不到永續合約市場結構"},
+		verdictOf(underTest.savedResult(t, "ARB"), "priceChange"))
 }

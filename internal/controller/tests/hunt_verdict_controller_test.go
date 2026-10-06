@@ -64,7 +64,8 @@ func TestVerdictRoutes(t *testing.T) {
 	t.Run("a finished round answers with its run", func(t *testing.T) {
 		underTest := newVerdictRoutesUnderTest(t)
 		underTest.pipelineRunRepository.EXPECT().FindLatestSucceeded(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 9}, true, nil)
-		underTest.coinInsightRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, nil)
+		underTest.coinInsightRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinInsight{
+			{CoinSymbol: "PENGU", Succeeded: true, Direction: "bullish", Strength: 7}}, nil)
 		underTest.pipelineRunRepository.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ any, pipelineRun entities.PipelineRun) (entities.PipelineRun, error) {
 				pipelineRun.ID = 13

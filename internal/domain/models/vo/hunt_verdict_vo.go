@@ -5,8 +5,8 @@ import "github.com/shopspring/decimal"
 type HuntActionVo string
 
 const (
+	// The hunt only goes long; a short, like any other value, is watched.
 	HuntActionLong  HuntActionVo = "long"
-	HuntActionShort HuntActionVo = "short"
 	HuntActionWatch HuntActionVo = "watch"
 	HuntActionAvoid HuntActionVo = "avoid"
 )
@@ -45,6 +45,8 @@ type HuntVerdictPolicyVo struct {
 	MaximumStopLossPercent     decimal.Decimal
 	MinimumTakeProfitPercent   decimal.Decimal
 	MaximumTakeProfitPercent   decimal.Decimal
-	// MaximumShortTakeProfitPercent keeps a short's take-profit price above zero: a price can fall at most to nothing.
-	MaximumShortTakeProfitPercent decimal.Decimal
+	// MinimumBullishInsightStrength is the weakest bullish insight still handed to the strategist.
+	MinimumBullishInsightStrength int
+	// MinimumHuntBoardConfidence is the least confidence a long verdict needs to be put on the hunt board.
+	MinimumHuntBoardConfidence int
 }

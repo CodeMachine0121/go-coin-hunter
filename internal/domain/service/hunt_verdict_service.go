@@ -12,7 +12,7 @@ import (
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 )
 
-// HuntVerdictService asks the strategist for a verdict on every analyzed coin at once and rewrites the hunt board.
+// HuntVerdictService asks the strategist for a verdict on every bullish coin at once and rewrites the hunt board with the longs.
 type HuntVerdictService struct {
 	pipelineRunRepository           domaininterface.IPipelineRunRepository
 	coinInsightRepository           domaininterface.ICoinInsightRepository
@@ -46,8 +46,9 @@ func NewHuntVerdictService(
 	}
 }
 
-// SynthesizeHuntVerdicts runs one verdict round over the newest successful insight round. Without one it refuses and
-// records nothing; a strategist that cannot answer fails the round and leaves the hunt board as it was.
+// SynthesizeHuntVerdicts runs one verdict round over the bullish insights of the newest successful insight round. Without
+// one it refuses and records nothing; without a bullish insight the strategist is not asked, the round is no data and the
+// board is emptied; a strategist that cannot answer fails the round and leaves the hunt board as it was.
 func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 	executionContext context.Context, triggerSource vo.PipelineRunTriggerSourceVo,
 ) (dto.PipelineRunDto, error) {
@@ -76,12 +77,10 @@ func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 		return dto.PipelineRunDto{}, fmt.Errorf("record verdict run: %w", createError)
 	}
 
-	// Every analyzed coin is shown with the market as it is now.
+	// Every bullish coin is shown with the market as it is now.
+	bullishFocus := domains.NewBullishFocusDomain(huntVerdictService.huntVerdictPolicy)
 	materials := []vo.HuntVerdictMaterialVo{}
-	for _, coinInsight := range coinInsights {
-		if !coinInsight.Succeeded {
-			continue
-		}
+	for _, coinInsight := range bullishFocus.SelectBullishInsights(coinInsights) {
 		material := vo.HuntVerdictMaterialVo{CoinSymbol: coinInsight.CoinSymbol, Direction: coinInsight.Direction, Strength: coinInsight.Strength,
 			Catalyst: coinInsight.Catalyst, Risks: coinInsight.Risks, Evidence: coinInsight.Evidence, DataGaps: coinInsight.DataGaps,
 			MarketStructure: huntVerdictService.perpetualMarketStructureService.FindMarketStructure(executionContext, coinInsight.CoinSymbol)}
@@ -91,6 +90,9 @@ func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 	// Asking: an unreadable answer is asked again once; a strategist that still cannot answer fails the round, which is
 	// an expected outcome rather than a fault, and the board is left as it was.
 	coinVerdicts, synthesizeError := func() ([]entities.CoinVerdict, error) {
+		if len(materials) == 0 {
+			return []entities.CoinVerdict{}, nil
+		}
 		answers, answerError := huntVerdictService.huntVerdictStrategistProxy.SynthesizeVerdicts(executionContext, materials)
 		if errors.Is(answerError, domains.ErrHuntVerdictAnswerUnusable) {
 			answers, answerError = huntVerdictService.huntVerdictStrategistProxy.SynthesizeVerdicts(executionContext, materials)
@@ -113,17 +115,15 @@ func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 		return failedPipelineRun.ToDto(), nil
 	}
 
-	// Keeping: the round's verdicts become its history, then the board is rewritten in one go.
+	// Keeping: every verdict of the round becomes its history, then the board is rewritten in one go with the longs alone.
 	storageError := func() error {
-		if saveError := huntVerdictService.coinVerdictRepository.CreateAll(executionContext, coinVerdicts); saveError != nil {
-			return fmt.Errorf("save coin verdicts: %w", saveError)
-		}
-		huntBoardEntries := make([]entities.HuntBoardEntry, 0, len(coinVerdicts))
-		for _, coinVerdict := range coinVerdicts {
-			huntBoardEntries = append(huntBoardEntries, coinVerdict.ToHuntBoardEntry(startedAt))
+		if len(coinVerdicts) > 0 {
+			if saveError := huntVerdictService.coinVerdictRepository.CreateAll(executionContext, coinVerdicts); saveError != nil {
+				return fmt.Errorf("save coin verdicts: %w", saveError)
+			}
 		}
 
-		return huntVerdictService.huntBoardRepository.Rewrite(executionContext, huntBoardEntries)
+		return huntVerdictService.huntBoardRepository.Rewrite(executionContext, bullishFocus.ToHuntBoardEntries(coinVerdicts, startedAt))
 	}()
 	if storageError != nil {
 		failedPipelineRun := domains.NewPipelineRunDomain(pipelineRun).Fail(storageError.Error(), huntVerdictService.clockProxy.Now())
@@ -134,12 +134,17 @@ func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 		return dto.PipelineRunDto{}, storageError
 	}
 
-	succeededPipelineRun := domains.NewPipelineRunDomain(pipelineRun).Succeed(huntVerdictService.clockProxy.Now())
-	if updateError := huntVerdictService.pipelineRunRepository.Update(executionContext, succeededPipelineRun); updateError != nil {
+	concludedPipelineRun := domains.NewPipelineRunDomain(pipelineRun).ConcludeVerdict(len(materials), huntVerdictService.clockProxy.Now())
+	if updateError := huntVerdictService.pipelineRunRepository.Update(executionContext, concludedPipelineRun); updateError != nil {
 		return dto.PipelineRunDto{}, fmt.Errorf("record verdict run conclusion: %w", updateError)
 	}
 
-	return succeededPipelineRun.ToDto(), nil
+	return concludedPipelineRun.ToDto(), nil
+}
+
+// ClearHuntBoard empties the hunt board: a round that ran cleanly and found nothing worth going long leaves no stale longs.
+func (huntVerdictService *HuntVerdictService) ClearHuntBoard(executionContext context.Context) error {
+	return huntVerdictService.huntBoardRepository.Rewrite(executionContext, []entities.HuntBoardEntry{})
 }
 
 // GetHuntBoard returns the hunt board, highest confidence first.

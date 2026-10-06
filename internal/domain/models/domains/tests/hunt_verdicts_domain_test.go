@@ -14,7 +14,8 @@ import (
 func verdictPolicy() vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{MinimumLeverage: 1, MaximumLeverage: 5, MaximumPositionSizePercent: decimal.NewFromInt(10),
 		MinimumStopLossPercent: decimal.NewFromInt(1), MaximumStopLossPercent: decimal.NewFromInt(50),
-		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200), MaximumShortTakeProfitPercent: decimal.NewFromInt(90)}
+		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200),
+		MinimumBullishInsightStrength: 6, MinimumHuntBoardConfidence: 50}
 }
 
 func pricedMaterial(coinSymbol string, lastPrice string) vo.HuntVerdictMaterialVo {
@@ -67,15 +68,6 @@ func TestHuntVerdictWidensATakeProfitUnderOnePercent(t *testing.T) {
 	assert.Equal(t, "0.0101", text(coinVerdict.TakeProfitPrice))
 }
 
-func TestHuntVerdictKeepsAShortTakeProfitAboveZero(t *testing.T) {
-	coinVerdict := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "short", 70, 3, "5", "10", "150"))
-
-	assert.Equal(t, "0.9", text(coinVerdict.TakeProfitRatio))
-	assert.Equal(t, "0.001", text(coinVerdict.TakeProfitPrice))
-	longKeepsTheWiderRange := onlyVerdict(t, pricedMaterial("PENGU", "0.01"), answerFor("PENGU", "long", 70, 3, "5", "10", "150"))
-	assert.Equal(t, "1.5", text(longKeepsTheWiderRange.TakeProfitRatio))
-}
-
 func TestHuntVerdictPricesFollowTheDirection(t *testing.T) {
 	testCases := []struct {
 		name                                   string
@@ -84,7 +76,6 @@ func TestHuntVerdictPricesFollowTheDirection(t *testing.T) {
 		wantStopLossRatio                      string
 	}{
 		{name: "a long stops below and takes profit above", action: "long", stopLoss: "10", wantStopLossPrice: "0.009", wantTakeProfitPrice: "0.013", wantStopLossRatio: "0.1"},
-		{name: "a short stops above and takes profit below", action: "short", stopLoss: "10", wantStopLossPrice: "0.011", wantTakeProfitPrice: "0.007", wantStopLossRatio: "0.1"},
 		{name: "a stop under one percent is widened to one percent", action: "long", stopLoss: "0.5", wantStopLossPrice: "0.0099", wantTakeProfitPrice: "0.013", wantStopLossRatio: "0.01"},
 	}
 
@@ -116,8 +107,10 @@ func TestHuntVerdictWatchesWhatCannotBeActedOn(t *testing.T) {
 			wantAction: "watch", wantRationale: "查不到最新價格，無法設定停損"},
 		{name: "a long at a price of zero", material: pricedMaterial("PENGU", "0"), answer: answerFor("PENGU", "long", 80, 5, "10", "10", "30"),
 			wantAction: "watch", wantRationale: "查不到最新價格，無法設定停損"},
-		{name: "a short with a market but no price", material: vo.HuntVerdictMaterialVo{CoinSymbol: "PENGU", MarketStructure: &vo.PerpetualMarketStructureVo{ExchangeName: "OKX"}},
-			answer: answerFor("PENGU", "short", 80, 5, "10", "10", "30"), wantAction: "watch", wantRationale: "查不到最新價格，無法設定停損"},
+		{name: "a long with a market but no price", material: vo.HuntVerdictMaterialVo{CoinSymbol: "PENGU", MarketStructure: &vo.PerpetualMarketStructureVo{ExchangeName: "OKX"}},
+			answer: answerFor("PENGU", "long", 80, 5, "10", "10", "30"), wantAction: "watch", wantRationale: "查不到最新價格，無法設定停損"},
+		{name: "a short, since the hunt only goes long", material: pricedMaterial("PENGU", "0.01"), answer: answerFor("PENGU", "short", 80, 3, "5", "10", "30"),
+			wantAction: "watch", wantRationale: "理由"},
 	}
 
 	for _, testCase := range testCases {
@@ -148,9 +141,52 @@ func TestHuntVerdictsCoverExactlyTheCoinsShown(t *testing.T) {
 	assert.Equal(t, entities.CoinVerdict{PipelineRunID: 3, CoinSymbol: "STRK", Action: "watch", PositionSizeRatio: decimal.Zero, Rationale: "CIO 未給出裁決"}, coinVerdicts[1])
 }
 
-func TestSucceedRun(t *testing.T) {
-	succeeded := domains.NewPipelineRunDomain(entities.PipelineRun{ID: 1, Status: "running"}).Succeed(receivedAt)
-
+func TestConcludeVerdict(t *testing.T) {
+	succeeded := domains.NewPipelineRunDomain(entities.PipelineRun{ID: 1, Status: "running"}).ConcludeVerdict(2, receivedAt)
 	assert.Equal(t, string(vo.PipelineRunStatusSucceeded), succeeded.Status)
 	assert.Equal(t, receivedAt, *succeeded.FinishedAt)
+
+	noData := domains.NewPipelineRunDomain(entities.PipelineRun{ID: 1, Status: "running"}).ConcludeVerdict(0, receivedAt)
+	assert.Equal(t, string(vo.PipelineRunStatusNoData), noData.Status)
+	assert.Equal(t, receivedAt, *noData.FinishedAt)
+}
+
+func insight(coinSymbol string, succeeded bool, direction string, strength int) entities.CoinInsight {
+	return entities.CoinInsight{CoinSymbol: coinSymbol, Succeeded: succeeded, Direction: direction, Strength: strength}
+}
+
+func TestBullishFocusHandsOnlyStrongBullishInsightsToTheStrategist(t *testing.T) {
+	bullishInsights := domains.NewBullishFocusDomain(verdictPolicy()).SelectBullishInsights([]entities.CoinInsight{
+		insight("PENGU", true, "bullish", 8),
+		insight("STRK", true, "bearish", 9),
+		insight("ARB", true, "bullish", 6),
+		insight("OP", true, "bullish", 5),
+		insight("TIA", true, "neutral", 9),
+		insight("SEI", false, "bullish", 9),
+	})
+
+	symbols := []string{}
+	for _, bullishInsight := range bullishInsights {
+		symbols = append(symbols, bullishInsight.CoinSymbol)
+	}
+	assert.Equal(t, []string{"PENGU", "ARB"}, symbols)
+	assert.Empty(t, domains.NewBullishFocusDomain(verdictPolicy()).SelectBullishInsights([]entities.CoinInsight{insight("TIA", true, "neutral", 9)}))
+}
+
+func TestBullishFocusPutsOnlyConfidentLongsOnTheHuntBoard(t *testing.T) {
+	calculatedAt := receivedAt
+	huntBoardEntries := domains.NewBullishFocusDomain(verdictPolicy()).ToHuntBoardEntries([]entities.CoinVerdict{
+		{PipelineRunID: 3, CoinSymbol: "PENGU", Action: "long", Confidence: 72, Leverage: 3, Rationale: "理由"},
+		{PipelineRunID: 3, CoinSymbol: "STRK", Action: "watch", Confidence: 90},
+		{PipelineRunID: 3, CoinSymbol: "ARB", Action: "avoid", Confidence: 90},
+		{PipelineRunID: 3, CoinSymbol: "OP", Action: "long", Confidence: 50},
+		{PipelineRunID: 3, CoinSymbol: "TIA", Action: "long", Confidence: 49},
+	}, calculatedAt)
+
+	require.Len(t, huntBoardEntries, 2)
+	assert.Equal(t, entities.HuntBoardEntry{CoinSymbol: "PENGU", CalculatedAt: calculatedAt, PipelineRunID: 3, Action: "long", Confidence: 72,
+		Leverage: 3, Rationale: "理由"}, huntBoardEntries[0])
+	assert.Equal(t, "OP", huntBoardEntries[1].CoinSymbol)
+	assert.Empty(t, domains.NewBullishFocusDomain(verdictPolicy()).ToHuntBoardEntries(
+		[]entities.CoinVerdict{{CoinSymbol: "STRK", Action: "watch"}}, calculatedAt))
 }

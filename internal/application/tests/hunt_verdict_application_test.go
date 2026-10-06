@@ -31,7 +31,8 @@ const (
 func huntVerdictPolicy() vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{MinimumLeverage: 1, MaximumLeverage: 5, MaximumPositionSizePercent: decimal.NewFromInt(10),
 		MinimumStopLossPercent: decimal.NewFromInt(1), MaximumStopLossPercent: decimal.NewFromInt(50),
-		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200), MaximumShortTakeProfitPercent: decimal.NewFromInt(90)}
+		MinimumTakeProfitPercent: decimal.NewFromInt(1), MaximumTakeProfitPercent: decimal.NewFromInt(200),
+		MinimumBullishInsightStrength: 6, MinimumHuntBoardConfidence: 50}
 }
 
 func longAnswer(coinSymbol string) vo.HuntVerdictAnswerVo {
@@ -54,9 +55,25 @@ type huntVerdictUnderTest struct {
 	lastPipelineRunUpdate  *entities.PipelineRun
 }
 
-// newHuntVerdictUnderTest wires the real service around a latest insight round with these successful insights (plus one
+// newHuntVerdictUnderTest wires the real service around a latest insight round with these bullish insights (plus one
 // failed insight that must never be shown); every coin trades on Binance at 0.01 unless a test says otherwise.
 func newHuntVerdictUnderTest(t *testing.T, analyzedSymbols ...string) *huntVerdictUnderTest {
+	coinInsights := []entities.CoinInsight{{PipelineRunID: latestInsightRunID, CoinSymbol: "FAILED", FailureReason: "AI 回覆格式不合格"}}
+	for _, analyzedSymbol := range analyzedSymbols {
+		coinInsights = append(coinInsights, entities.CoinInsight{PipelineRunID: latestInsightRunID, CoinSymbol: analyzedSymbol, Succeeded: true,
+			Direction: "bullish", Strength: 7, Catalyst: "幣安上新合約", Risks: []string{"解鎖"}, Evidence: []string{"持倉 +12%"}, DataGaps: []string{}})
+	}
+
+	return newHuntVerdictUnderTestWith(t, coinInsights)
+}
+
+// judged is an analyzed insight with only what decides whether the strategist sees it.
+func judged(coinSymbol string, direction string, strength int) entities.CoinInsight {
+	return entities.CoinInsight{PipelineRunID: latestInsightRunID, CoinSymbol: coinSymbol, Succeeded: true, Direction: direction, Strength: strength,
+		Risks: []string{}, Evidence: []string{}, DataGaps: []string{}}
+}
+
+func newHuntVerdictUnderTestWith(t *testing.T, coinInsights []entities.CoinInsight) *huntVerdictUnderTest {
 	controller := gomock.NewController(t)
 	underTest := &huntVerdictUnderTest{
 		pipelineRunRepository: mocks.NewMockIPipelineRunRepository(controller),
@@ -66,11 +83,6 @@ func newHuntVerdictUnderTest(t *testing.T, analyzedSymbols ...string) *huntVerdi
 		binanceMarket:         mocks.NewMockIPerpetualMarketStructureProxy(controller),
 		bybitMarket:           mocks.NewMockIPerpetualMarketStructureProxy(controller),
 		strategist:            mocks.NewMockIHuntVerdictStrategistProxy(controller),
-	}
-	coinInsights := []entities.CoinInsight{{PipelineRunID: latestInsightRunID, CoinSymbol: "FAILED", FailureReason: "AI 回覆格式不合格"}}
-	for _, analyzedSymbol := range analyzedSymbols {
-		coinInsights = append(coinInsights, entities.CoinInsight{PipelineRunID: latestInsightRunID, CoinSymbol: analyzedSymbol, Succeeded: true,
-			Direction: "bullish", Strength: 7, Catalyst: "幣安上新合約", Risks: []string{"解鎖"}, Evidence: []string{"持倉 +12%"}, DataGaps: []string{}})
 	}
 
 	underTest.pipelineRunRepository.EXPECT().FindLatestSucceeded(gomock.Any(), string(vo.PipelineRunStepInsight)).
@@ -220,9 +232,11 @@ func TestSynthesizeHuntVerdictsShowsTheFirstExchangeThatListsTheCoin(t *testing.
 	require.NoError(t, synthesizeError)
 	assert.Equal(t, "Bybit", underTest.shownMaterials[0].MarketStructure.ExchangeName)
 	assert.Nil(t, underTest.shownMaterials[1].MarketStructure)
+	assert.Equal(t, []string{"STRK"}, boardSymbols(underTest.rewrittenBoard))
 	assert.Equal(t, "0.18", text(underTest.rewrittenBoard[0].StopLossPrice))
-	assert.Equal(t, "watch", underTest.rewrittenBoard[1].Action)
-	assert.Equal(t, "查不到最新價格，無法設定停損", underTest.rewrittenBoard[1].Rationale)
+	require.Len(t, underTest.savedCoinVerdicts, 2)
+	assert.Equal(t, "watch", underTest.savedCoinVerdicts[1].Action)
+	assert.Equal(t, "查不到最新價格，無法設定停損", underTest.savedCoinVerdicts[1].Rationale)
 }
 
 func TestSynthesizeHuntVerdictsRefusesWithoutASuccessfulInsightRound(t *testing.T) {
@@ -283,14 +297,14 @@ func TestSynthesizeHuntVerdictsSurfacesStorageFailures(t *testing.T) {
 		}},
 		{name: "recording a strategist failure", arrange: func(pipelineRuns *mocks.MockIPipelineRunRepository, insights *mocks.MockICoinInsightRepository, strategist *mocks.MockIHuntVerdictStrategistProxy, _ *mocks.MockICoinVerdictRepository) {
 			pipelineRuns.EXPECT().FindLatestSucceeded(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 9}, true, nil)
-			insights.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, nil)
+			insights.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinInsight{judged("BTC", "bullish", 7)}, nil)
 			pipelineRuns.EXPECT().Create(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 13}, nil)
 			strategist.EXPECT().SynthesizeVerdicts(gomock.Any(), gomock.Any()).Return(nil, errors.New("overloaded"))
 			pipelineRuns.EXPECT().Update(gomock.Any(), gomock.Any()).Return(errors.New("disk"))
 		}},
 		{name: "recording a storage failure", arrange: func(pipelineRuns *mocks.MockIPipelineRunRepository, insights *mocks.MockICoinInsightRepository, strategist *mocks.MockIHuntVerdictStrategistProxy, verdicts *mocks.MockICoinVerdictRepository) {
 			pipelineRuns.EXPECT().FindLatestSucceeded(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 9}, true, nil)
-			insights.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, nil)
+			insights.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinInsight{judged("BTC", "bullish", 7)}, nil)
 			pipelineRuns.EXPECT().Create(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 13}, nil)
 			strategist.EXPECT().SynthesizeVerdicts(gomock.Any(), gomock.Any()).Return(nil, nil)
 			verdicts.EXPECT().CreateAll(gomock.Any(), gomock.Any()).Return(errors.New("disk"))
@@ -298,7 +312,7 @@ func TestSynthesizeHuntVerdictsSurfacesStorageFailures(t *testing.T) {
 		}},
 		{name: "recording the conclusion", arrange: func(pipelineRuns *mocks.MockIPipelineRunRepository, insights *mocks.MockICoinInsightRepository, strategist *mocks.MockIHuntVerdictStrategistProxy, verdicts *mocks.MockICoinVerdictRepository) {
 			pipelineRuns.EXPECT().FindLatestSucceeded(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 9}, true, nil)
-			insights.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, nil)
+			insights.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinInsight{judged("BTC", "bullish", 7)}, nil)
 			pipelineRuns.EXPECT().Create(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 13}, nil)
 			strategist.EXPECT().SynthesizeVerdicts(gomock.Any(), gomock.Any()).Return(nil, nil)
 			verdicts.EXPECT().CreateAll(gomock.Any(), gomock.Any()).Return(nil)
@@ -385,4 +399,81 @@ func TestGetHuntBoardAndVerdicts(t *testing.T) {
 
 		assert.ErrorContains(t, findError, "disk")
 	})
+}
+
+func TestSynthesizeHuntVerdictsWeighsOnlyStrongBullishInsights(t *testing.T) {
+	underTest := newHuntVerdictUnderTestWith(t, []entities.CoinInsight{
+		judged("PENGU", "bullish", 8), judged("STRK", "bearish", 9), judged("ARB", "bullish", 5), judged("OP", "bullish", 6),
+	})
+	underTest.everyCoinOnBinance()
+	underTest.strategistAnswers([]vo.HuntVerdictAnswerVo{longAnswer("PENGU"), longAnswer("OP")})
+
+	pipelineRun, synthesizeError := underTest.huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
+
+	require.NoError(t, synthesizeError)
+	assert.Equal(t, string(vo.PipelineRunStatusSucceeded), pipelineRun.Status)
+	shownSymbols := []string{}
+	for _, material := range underTest.shownMaterials {
+		shownSymbols = append(shownSymbols, material.CoinSymbol)
+	}
+	assert.Equal(t, []string{"PENGU", "OP"}, shownSymbols)
+	assert.Len(t, underTest.savedCoinVerdicts, 2)
+}
+
+func TestSynthesizeHuntVerdictsWithoutABullishInsightAsksNobodyAndEmptiesTheBoard(t *testing.T) {
+	underTest := newHuntVerdictUnderTestWith(t, []entities.CoinInsight{judged("PENGU", "neutral", 9),
+		{PipelineRunID: latestInsightRunID, CoinSymbol: "STRK", FailureReason: "AI 回覆格式不合格"}})
+	underTest.strategist.EXPECT().SynthesizeVerdicts(gomock.Any(), gomock.Any()).Times(0)
+
+	pipelineRun, synthesizeError := underTest.huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
+
+	require.NoError(t, synthesizeError)
+	assert.Equal(t, string(vo.PipelineRunStatusNoData), pipelineRun.Status)
+	assert.Equal(t, string(vo.PipelineRunStatusNoData), underTest.lastPipelineRunUpdate.Status)
+	assert.Nil(t, underTest.savedCoinVerdicts)
+	require.NotNil(t, underTest.rewrittenBoard)
+	assert.Empty(t, underTest.rewrittenBoard)
+}
+
+func TestSynthesizeHuntVerdictsPutsOnlyConfidentLongsOnTheBoard(t *testing.T) {
+	answer := func(coinSymbol string, action string, confidence int) vo.HuntVerdictAnswerVo {
+		answer := longAnswer(coinSymbol)
+		answer.Action, answer.Confidence = action, confidence
+		return answer
+	}
+	testCases := []struct {
+		name            string
+		answers         []vo.HuntVerdictAnswerVo
+		wantBoard       []string
+		wantSavedAction map[string]string
+	}{
+		{name: "longs at or over fifty make the board, the rest stay in history",
+			answers: []vo.HuntVerdictAnswerVo{answer("PENGU", "long", 72), answer("STRK", "watch", 90), answer("ARB", "avoid", 90),
+				answer("OP", "long", 50), answer("TIA", "long", 49)},
+			wantBoard:       []string{"PENGU", "OP"},
+			wantSavedAction: map[string]string{"PENGU": "long", "STRK": "watch", "ARB": "avoid", "OP": "long", "TIA": "long"}},
+		{name: "a short is watched and stays off the board",
+			answers:         []vo.HuntVerdictAnswerVo{answer("PENGU", "short", 80), answer("STRK", "watch", 60), answer("ARB", "avoid", 60), answer("OP", "watch", 60), answer("TIA", "avoid", 60)},
+			wantBoard:       []string{},
+			wantSavedAction: map[string]string{"PENGU": "watch", "STRK": "watch", "ARB": "avoid", "OP": "watch", "TIA": "avoid"}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			underTest := newHuntVerdictUnderTest(t, "PENGU", "STRK", "ARB", "OP", "TIA")
+			underTest.everyCoinOnBinance()
+			underTest.strategistAnswers(testCase.answers)
+
+			pipelineRun, synthesizeError := underTest.huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
+
+			require.NoError(t, synthesizeError)
+			assert.Equal(t, string(vo.PipelineRunStatusSucceeded), pipelineRun.Status)
+			assert.Equal(t, testCase.wantBoard, boardSymbols(underTest.rewrittenBoard))
+			savedActions := map[string]string{}
+			for _, coinVerdict := range underTest.savedCoinVerdicts {
+				savedActions[coinVerdict.CoinSymbol] = coinVerdict.Action
+			}
+			assert.Equal(t, testCase.wantSavedAction, savedActions)
+		})
+	}
 }

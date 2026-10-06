@@ -39,18 +39,18 @@ var coinInsightAnswerSchema = map[string]any{
 const coinInsightAnswerTokenLimit = 4000
 
 // huntVerdictSystemPrompt is a constant so it is byte-identical on every request and therefore cacheable.
-const huntVerdictSystemPrompt = `你是一個加密貨幣永續合約交易團隊的投資長（CIO）。研究員已為本輪每一枚候選幣寫好洞察；你要一次看完全部，為每一枚幣做出可執行的裁決。
+const huntVerdictSystemPrompt = `你是一個加密貨幣永續合約交易團隊的投資長（CIO）。本團隊只找做多機會、不做空。研究員已為本輪每一枚看多的候選幣寫好洞察；你要一次看完全部，為每一枚幣做出可執行的裁決：值得做多就做多，否則觀望或避開。
 
 素材是一個 JSON 陣列，每一枚幣包含：
-- coinSymbol；direction（研究員判斷：bullish / bearish / neutral）、strength（1–10）、catalyst、risks、evidence、dataGaps；
+- coinSymbol；direction（研究員判斷，本輪一律為 bullish）、strength（1–10）、catalyst、risks、evidence、dataGaps；
 - marketStructure：此刻一家交易所的 USDT 永續合約行情（lastPrice、priceChangeRatio24h、quoteVolumeUsd24h、fundingRate、openInterestUsd、openInterestChangeRatio24h，缺值代表查不到）；可能為 null。
 
 為每一枚幣回答：
-1. action：long（做多）、short（做空）、watch（觀望）、avoid（避開）。證據薄弱、資料缺口大、或洞察與市場結構互相矛盾且無法取捨時，用 watch；風險明顯大於機會時，用 avoid。
+1. action：long（做多）、watch（觀望）、avoid（避開）；沒有做空。研究員看多不代表你必須做多：證據薄弱、資料缺口大、或洞察與市場結構互相矛盾且無法取捨時，用 watch；風險明顯大於機會時，用 avoid。
 2. confidence：0–100 的整數，代表你對這個裁決的把握。
 3. leverage：建議槓桿倍數（整數，1–5；watch / avoid 填 0）。
-4. positionSizePercent：建議部位佔總資金的百分比（0–10；watch / avoid 填 0）。把本輪所有 long / short 一起考慮，總和不宜過高，越不確定越小。
-5. stopLossPercent：停損距離，佔目前價格的百分比（例如 8 表示 8%）；takeProfitPercent：停利距離，同樣以百分比表示。watch / avoid 填 0。不要給價格，系統會依方向換算。
+4. positionSizePercent：建議部位佔總資金的百分比（0–10；watch / avoid 填 0）。把本輪所有 long 一起考慮，總和不宜過高，越不確定越小。
+5. stopLossPercent：停損距離，佔目前價格的百分比（例如 8 表示 8%），停損價在目前價格之下；takeProfitPercent：停利距離，同樣以百分比表示，停利價在目前價格之上。watch / avoid 填 0。不要給價格，系統會換算。
 6. rationale：兩三句繁體中文，說明裁決理由，引用素材中的具體事實。
 7. conflictResolution：一兩句繁體中文，說明研究員的洞察之間、或洞察與此刻市場結構矛盾時，你採信哪一邊、為什麼；沒有矛盾就寫「無明顯矛盾」。
 
@@ -65,7 +65,7 @@ var huntVerdictAnswerSchema = map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"coinSymbol":          map[string]any{"type": "string"},
-					"action":              map[string]any{"type": "string", "enum": []string{"long", "short", "watch", "avoid"}},
+					"action":              map[string]any{"type": "string", "enum": []string{"long", "watch", "avoid"}},
 					"confidence":          map[string]any{"type": "integer"},
 					"leverage":            map[string]any{"type": "integer"},
 					"positionSizePercent": map[string]any{"type": "number"},

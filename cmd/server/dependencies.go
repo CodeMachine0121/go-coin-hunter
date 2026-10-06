@@ -134,8 +134,8 @@ func claudeModelSettingsFor(applicationConfig config.ApplicationConfig) (analysi
 }
 
 // huntVerdictPolicyFor holds the safe ranges every verdict is clamped into: leverage 1-5, position up to 10%,
-// stop loss 1-50% and take profit 1-200% of the latest price, at most 90% for a short.
-func huntVerdictPolicyFor() vo.HuntVerdictPolicyVo {
+// stop loss 1-50% and take profit 1-200% of the latest price; how bullish is bullish enough comes from the settings.
+func huntVerdictPolicyFor(verdictConfig config.VerdictConfig) vo.HuntVerdictPolicyVo {
 	return vo.HuntVerdictPolicyVo{
 		MinimumLeverage:               1,
 		MaximumLeverage:               5,
@@ -144,7 +144,8 @@ func huntVerdictPolicyFor() vo.HuntVerdictPolicyVo {
 		MaximumStopLossPercent:        decimal.NewFromInt(50),
 		MinimumTakeProfitPercent:      decimal.NewFromInt(1),
 		MaximumTakeProfitPercent:      decimal.NewFromInt(200),
-		MaximumShortTakeProfitPercent: decimal.NewFromInt(90),
+		MinimumBullishInsightStrength: verdictConfig.MinimumBullishInsightStrength,
+		MinimumHuntBoardConfidence:    verdictConfig.MinimumHuntBoardConfidence,
 	}
 }
 
@@ -223,7 +224,7 @@ func servicesFor(database *gorm.DB, applicationConfig config.ApplicationConfig) 
 				applicationConfig.Verdict.MarketSourceTimeout),
 			claudeAnalysisProxy,
 			clockProxy,
-			huntVerdictPolicyFor(),
+			huntVerdictPolicyFor(applicationConfig.Verdict),
 		),
 		pipelineRun: service.NewPipelineRunService(pipelineRunRepository, clockProxy),
 	}

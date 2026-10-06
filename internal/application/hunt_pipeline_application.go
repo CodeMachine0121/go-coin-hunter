@@ -37,7 +37,8 @@ func NewHuntPipelineApplication(
 }
 
 // RunHuntRound stops at the first step that errs or does not succeed, and starts no step once asked to stop or once the
-// context has ended. Another round already running is refused; every round that runs leaves one log line.
+// context has ended. A round stopped by a step with no data found nothing worth going long, so it empties the hunt board;
+// a failed step leaves the board alone. Another round already running is refused; every round that runs leaves one log line.
 func (huntPipelineApplication *HuntPipelineApplication) RunHuntRound(
 	executionContext context.Context, stopBetweenSteps <-chan struct{}, triggerSource vo.PipelineRunTriggerSourceVo,
 ) (dto.HuntRoundDto, error) {
@@ -96,6 +97,12 @@ func (huntPipelineApplication *HuntPipelineApplication) runSteps(
 		huntRound.Steps = append(huntRound.Steps, pipelineRun)
 		if pipelineRun.Status != string(vo.PipelineRunStatusSucceeded) {
 			huntRound.StoppedStep, huntRound.StoppedReason = string(pipelineStep.step), stepDomain.NotSucceededReason(pipelineRun.Status)
+			// Clearing is idempotent, so a verdict step that already emptied the board on no data is simply emptied again.
+			if pipelineRun.Status == string(vo.PipelineRunStatusNoData) {
+				if clearError := huntPipelineApplication.huntVerdictService.ClearHuntBoard(executionContext); clearError != nil {
+					huntRound.StoppedReason += "；清空獵捕結果表失敗：" + clearError.Error()
+				}
+			}
 			return huntRound
 		}
 	}

@@ -49,11 +49,12 @@ func (fakeApi *fakeMessagesApi) serve(t *testing.T, statusCode int, stopReason s
 
 func pengu() vo.CoinInsightMaterialVo {
 	fundingRate := decimal.RequireFromString("0.0001")
+	fundingIntervalHours := 4
 	return vo.CoinInsightMaterialVo{
 		CoinSymbol:            "PENGU",
 		IntelligenceHeadlines: []vo.HeadlineVo{{SourceName: "binanceAnnouncement", Title: "Binance Futures Will Launch PENGUUSDT", PublishedAt: time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)}},
 		NewsHeadlines:         []vo.HeadlineVo{{SourceName: "CoinDesk", Title: "PENGU rallies"}},
-		MarketStructure:       &vo.PerpetualMarketStructureVo{ExchangeName: "幣安", FundingRate: &fundingRate},
+		MarketStructure:       &vo.PerpetualMarketStructureVo{ExchangeName: "幣安", FundingRate: &fundingRate, FundingIntervalHours: &fundingIntervalHours},
 		FilterVerdicts:        []vo.FilterVerdictVo{{FilterName: "unlockSchedule", Outcome: vo.FilterOutcomeNoData, Reason: "查不到解鎖時程"}},
 		DataGaps:              []string{"查不到近期新聞"},
 	}
@@ -90,6 +91,7 @@ func TestClaudeAnalystReadsAnAnswerAndAsksInTheAgreedShape(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(userText), &material))
 	assert.Equal(t, "PENGU", material["coinSymbol"])
 	assert.Equal(t, "0.0001", material["marketStructure"].(map[string]any)["fundingRate"])
+	assert.Equal(t, float64(4), material["marketStructure"].(map[string]any)["fundingIntervalHours"])
 	assert.Nil(t, material["marketStructure"].(map[string]any)["lastPrice"])
 	assert.Equal(t, []any{"查不到近期新聞"}, material["dataGaps"])
 	assert.Equal(t, "unlockSchedule", material["filterVerdicts"].([]any)[0].(map[string]any)["rule"])

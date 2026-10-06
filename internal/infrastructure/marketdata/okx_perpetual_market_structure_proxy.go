@@ -8,10 +8,14 @@ import (
 
 	"github.com/CodeMachine0121/go-coin-hunter/internal/domain/models/vo"
 	"github.com/CodeMachine0121/go-coin-hunter/internal/utilities"
+	"github.com/shopspring/decimal"
 )
 
 // okxInstrumentMissingCode is OKX saying the instrument does not exist.
 const okxInstrumentMissingCode = "51001"
+
+// millisecondsPerHour turns the gap between two funding times into the funding period.
+var millisecondsPerHour = decimal.NewFromInt(3_600_000)
 
 // OkxPerpetualMarketStructureProxy reads OKX's swap ticker, funding rate and current open interest; OKX keeps no free
 // open interest history, so the day's change stays unknown.
@@ -59,7 +63,14 @@ func (okxPerpetualMarketStructureProxy *OkxPerpetualMarketStructureProxy) FindMa
 		marketStructure.QuoteVolumeUsd24h = &quoteVolumeUsd
 	}
 	if len(fundingRates.Data) > 0 {
-		marketStructure.FundingRate = fundingRates.Data[0].FundingRate.decimalOrNil()
+		fundingRate := fundingRates.Data[0]
+		marketStructure.FundingRate = fundingRate.FundingRate.decimalOrNil()
+		if fundingRate.FundingTime != nil && fundingRate.NextFundingTime != nil {
+			fundingIntervalHours := int(fundingRate.NextFundingTime.value.Sub(fundingRate.FundingTime.value).Div(millisecondsPerHour).IntPart())
+			if fundingIntervalHours > 0 {
+				marketStructure.FundingIntervalHours = &fundingIntervalHours
+			}
+		}
 	}
 	if len(openInterests.Data) > 0 {
 		marketStructure.OpenInterestUsd = openInterests.Data[0].OpenInterestUsd.decimalOrNil()

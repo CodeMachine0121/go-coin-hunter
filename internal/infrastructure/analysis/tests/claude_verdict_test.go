@@ -90,6 +90,7 @@ func TestClaudeStrategistReadsVerdictsAndAsksInTheAgreedShape(t *testing.T) {
 	assert.Equal(t, "PENGU", materials[0]["coinSymbol"])
 	assert.Equal(t, "0.0097", materials[0]["marketStructure"].(map[string]any)["lastPrice"])
 	assert.Nil(t, materials[0]["marketStructure"].(map[string]any)["fundingRate"])
+	assert.Nil(t, materials[0]["marketStructure"].(map[string]any)["fundingIntervalHours"])
 }
 
 func TestClaudeStrategistTellsUnusableAnswersFromServiceErrors(t *testing.T) {

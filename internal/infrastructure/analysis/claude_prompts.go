@@ -7,7 +7,7 @@ const coinInsightSystemPrompt = `你是一位加密貨幣永續合約的研究�
 - coinSymbol：幣種代號。
 - intelligenceHeadlines：交易所公告、新上架合約、熱門排行、鏈上新幣看板等情報標題（新到舊）。
 - newsHeadlines：近 3 天的新聞標題（新到舊）；以代號搜尋，可能混入同名但無關的新聞，請自行判斷相關性。
-- marketStructure：一家交易所的 USDT 永續合約行情：lastPrice、priceChangeRatio24h（0.06 表示 +6%）、quoteVolumeUsd24h、fundingRate（每期，0.0001 表示 0.01%）、openInterestUsd、openInterestChangeRatio24h。缺值代表該交易所沒提供。
+- marketStructure：一家交易所的 USDT 永續合約行情：lastPrice、priceChangeRatio24h（0.06 表示 +6%）、quoteVolumeUsd24h、fundingRate（每期，0.0001 表示 0.01%）、fundingIntervalHours（每期幾小時：8、4 或 1；同樣的費率，期越短代表越擁擠）、openInterestUsd、openInterestChangeRatio24h。缺值代表該交易所沒提供。
 - filterVerdicts：規則式過濾的結果（passed / noData），附理由。
 - dataGaps：系統沒能收集到的素材。
 
@@ -43,7 +43,7 @@ const huntVerdictSystemPrompt = `你是一個加密貨幣永續合約交易團�
 
 素材是一個 JSON 陣列，每一枚幣包含：
 - coinSymbol；direction（研究員判斷，本輪一律為 bullish）、strength（1–10）、catalyst、risks、evidence、dataGaps；
-- marketStructure：此刻一家交易所的 USDT 永續合約行情（lastPrice、priceChangeRatio24h、quoteVolumeUsd24h、fundingRate、openInterestUsd、openInterestChangeRatio24h，缺值代表查不到）；可能為 null。
+- marketStructure：此刻一家交易所的 USDT 永續合約行情（lastPrice、priceChangeRatio24h、quoteVolumeUsd24h、fundingRate（每期）、fundingIntervalHours（每期幾小時）、openInterestUsd、openInterestChangeRatio24h，缺值代表查不到）；可能為 null。
 
 為每一枚幣回答：
 1. action：long（做多）、watch（觀望）、avoid（避開）；沒有做空。研究員看多不代表你必須做多：證據薄弱、資料缺口大、或洞察與市場結構互相矛盾且無法取捨時，用 watch；風險明顯大於機會時，用 avoid。

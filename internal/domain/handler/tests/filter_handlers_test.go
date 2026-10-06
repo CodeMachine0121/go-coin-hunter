@@ -144,6 +144,10 @@ func TestPerpetualContractListingFilterHandler(t *testing.T) {
 	})
 }
 
+func hoursOf(hours int) *int {
+	return &hours
+}
+
 func withMarketStructure(marketStructure vo.PerpetualMarketStructureVo) vo.CoinProfileVo {
 	return vo.CoinProfileVo{MarketStructure: &marketStructure}
 }
@@ -190,6 +194,16 @@ func TestFundingRateOverheatFilterHandler(t *testing.T) {
 			wantOutcome: vo.FilterOutcomeRejected, wantReason: "資金費率 0.11% 高於上限 0.1%"},
 		{name: "a negative rate passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("-0.003")}),
 			wantOutcome: vo.FilterOutcomePassed},
+		{name: "an 8-hour rate over the ceiling reads as it is", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.0011"), FundingIntervalHours: hoursOf(8)}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "資金費率 0.11% 高於上限 0.1%"},
+		{name: "an hourly rate is scaled to 8 hours before the ceiling", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.0008"), FundingIntervalHours: hoursOf(1)}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "資金費率每 1 小時 0.08%，折合每 8 小時 0.64%，高於上限 0.1%"},
+		{name: "a 4-hour rate exactly at the scaled ceiling passes", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.0005"), FundingIntervalHours: hoursOf(4)}),
+			wantOutcome: vo.FilterOutcomePassed},
+		{name: "a 4-hour rate just over the scaled ceiling is rejected", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.00051"), FundingIntervalHours: hoursOf(4)}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "資金費率每 4 小時 0.051%，折合每 8 小時 0.102%，高於上限 0.1%"},
+		{name: "a 4-hour rate well over the scaled ceiling", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{FundingRate: amount("0.0006"), FundingIntervalHours: hoursOf(4)}),
+			wantOutcome: vo.FilterOutcomeRejected, wantReason: "資金費率每 4 小時 0.06%，折合每 8 小時 0.12%，高於上限 0.1%"},
 		{name: "no market structure is no data", coinProfile: vo.CoinProfileVo{}, wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到永續合約市場結構"},
 		{name: "no funding rate is no data", coinProfile: withMarketStructure(vo.PerpetualMarketStructureVo{}),
 			wantOutcome: vo.FilterOutcomeNoData, wantReason: "查不到資金費率"},

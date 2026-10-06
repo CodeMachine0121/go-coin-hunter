@@ -30,6 +30,7 @@ type marketStructureWire struct {
 	PriceChangeRatio24h        *string `json:"priceChangeRatio24h"`
 	QuoteVolumeUsd24h          *string `json:"quoteVolumeUsd24h"`
 	FundingRate                *string `json:"fundingRate"`
+	FundingIntervalHours       *int    `json:"fundingIntervalHours"`
 	OpenInterestUsd            *string `json:"openInterestUsd"`
 	OpenInterestChangeRatio24h *string `json:"openInterestChangeRatio24h"`
 }
@@ -53,6 +54,7 @@ func newMarketStructureWire(marketStructure *vo.PerpetualMarketStructureVo) *mar
 		PriceChangeRatio24h:        decimalText(marketStructure.PriceChangeRatio24h),
 		QuoteVolumeUsd24h:          decimalText(marketStructure.QuoteVolumeUsd24h),
 		FundingRate:                decimalText(marketStructure.FundingRate),
+		FundingIntervalHours:       marketStructure.FundingIntervalHours,
 		OpenInterestUsd:            decimalText(marketStructure.OpenInterestUsd),
 		OpenInterestChangeRatio24h: decimalText(marketStructure.OpenInterestChangeRatio24h),
 	}

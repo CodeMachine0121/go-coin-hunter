@@ -16,8 +16,11 @@ import (
 
 var percentDivisor = decimal.NewFromInt(100)
 
-// BinancePerpetualMarketStructureProxy reads Binance USDⓈ-M futures: the 24h ticker, the funding rate and 25 hourly open
-// interest readings, so the change over the last day can be told.
+// binanceDefaultFundingIntervalHours is the period of every contract Binance's funding info does not list.
+const binanceDefaultFundingIntervalHours = 8
+
+// BinancePerpetualMarketStructureProxy reads Binance USDⓈ-M futures: the 24h ticker, the funding rate and its period, and
+// 25 hourly open interest readings, so the change over the last day can be told.
 type BinancePerpetualMarketStructureProxy struct {
 	httpClient *http.Client
 	baseUrl    string
@@ -46,6 +49,11 @@ func (binancePerpetualMarketStructureProxy *BinancePerpetualMarketStructureProxy
 	if premiumError != nil {
 		return vo.PerpetualMarketStructureVo{}, false, premiumError
 	}
+	fundingInfos, fundingInfoError := utilities.GetJson[[]binanceFundingInfoWire](executionContext, binancePerpetualMarketStructureProxy.httpClient,
+		binancePerpetualMarketStructureProxy.baseUrl+"/fapi/v1/fundingInfo")
+	if fundingInfoError != nil {
+		return vo.PerpetualMarketStructureVo{}, false, fundingInfoError
+	}
 	openInterestHistory, historyError := utilities.GetJson[[]binanceOpenInterestHistoryWire](executionContext, binancePerpetualMarketStructureProxy.httpClient,
 		fmt.Sprintf("%s/futures/data/openInterestHist?symbol=%s&period=1h&limit=25", binancePerpetualMarketStructureProxy.baseUrl, contractSymbol))
 	if historyError != nil {
@@ -58,6 +66,13 @@ func (binancePerpetualMarketStructureProxy *BinancePerpetualMarketStructureProxy
 		QuoteVolumeUsd24h: ticker.QuoteVolume.decimalOrNil(),
 		FundingRate:       premiumIndex.LastFundingRate.decimalOrNil(),
 	}
+	fundingIntervalHours := binanceDefaultFundingIntervalHours
+	for _, fundingInfo := range fundingInfos {
+		if fundingInfo.Symbol == coinSymbol+"USDT" && fundingInfo.FundingIntervalHours > 0 {
+			fundingIntervalHours = fundingInfo.FundingIntervalHours
+		}
+	}
+	marketStructure.FundingIntervalHours = &fundingIntervalHours
 	if ticker.PriceChangePercent != nil {
 		priceChangeRatio := ticker.PriceChangePercent.value.Div(percentDivisor)
 		marketStructure.PriceChangeRatio24h = &priceChangeRatio

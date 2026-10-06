@@ -124,3 +124,18 @@ flowchart TD
 - **Open decisions (for implementation):**
   - 新環境變數：`FILTER_MINIMUM_PRICE_CHANGE_RATIO`（-0.1）、`FILTER_MAXIMUM_PRICE_CHANGE_RATIO`（0.6）、`FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO`（-0.1）、`FILTER_MAXIMUM_FUNDING_RATE`（0.001）、`VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH`（6）、`HUNT_BOARD_MINIMUM_CONFIDENCE`（50）。可為負的門檻需要一個允許負值的十進位解析函式。
   - 規則名稱（過濾結果中的 `filterName`）：`priceChange`、`openInterestChange`、`fundingRateOverheat`。
+
+---
+
+## 9. Improve-codebase Review
+
+Reviewed the branch diff for scattered logic and shallow boundaries; each candidate was judged against `.claude/rules/`:
+
+| Candidate | Decision | Why |
+| :--- | :--- | :--- |
+| The three momentum handlers each repeat "no market structure → no data" | **Rejected** | A shared base type or helper function would couple independent rules (rules say one rule, one handler, add/remove without touching others) and a package-level helper is a static utility the rules forbid. Three lines of guard per handler is the cheaper cost. |
+| The hunt round clears the board again after a verdict step that already emptied it on no data | **Rejected** | One uniform rule ("a round stopped on no data empties the board") is easier to reason about than a step-specific exception; the rewrite is idempotent and cheap. |
+| Pull "how bullish is bullish enough" out of the verdict service | **Already done** | `BullishFocusDomain` holds both thresholds; the service only calls it. |
+| Leftover short-selling code paths, constants and prompt text | **Verified gone** | No short branch, constant or schema value remains; only historical verdicts in storage may still read "short". |
+
+No refactor was necessary beyond what the implementation already landed.

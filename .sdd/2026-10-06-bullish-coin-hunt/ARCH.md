@@ -139,3 +139,22 @@ Reviewed the branch diff for scattered logic and shallow boundaries; each candid
 | Leftover short-selling code paths, constants and prompt text | **Verified gone** | No short branch, constant or schema value remains; only historical verdicts in storage may still read "short". |
 
 No refactor was necessary beyond what the implementation already landed.
+
+---
+
+## 10. Code Review Follow-up
+
+Each review finding was judged against `.claude/rules/` and the PRD.
+
+| Finding | Decision | Change |
+| :--- | :--- | :--- |
+| Market structure lookups ran under the leftover round budget and could start already expired | **Fixed** | `CoinProfileService` runs them beside the security and unlock lookups under `CoinProfileTimingVo.MarketStructureBudget` (60s) |
+| Unbounded fan-out could burst past exchange rate limits | **Fixed** | `PerpetualMarketStructureService.FindMarketStructures` caps lookups at once (`MarketStructureConfig.MaximumConcurrentLookups`, 5) |
+| The verdict step asked one coin after another | **Fixed** | It asks for every bullish coin through the same batch method |
+| Each step built its own market structure service | **Fixed** | One service built in `perpetualMarketStructureServiceFor` is shared by filtering, insight and verdict, with one timeout (`MarketStructureConfig.RequestTimeout`) |
+| Funding rates on different settlement periods were compared raw | **Fixed** | Proxies read the period (Binance `fundingInfo`, Bybit `instruments-info`, OKX funding times) into `PerpetualMarketStructureVo.FundingIntervalHours`; the rule scales to 8 hours; AI materials show the period; percentages in reasons keep four decimals |
+| Thresholds off their scale, or a floor above its ceiling | **Fixed** | `BullishFocusDomain` clamps strength 1–10 and confidence 0–100; the price range falls back to defaults together |
+| The reason constant sat in an errors file | **Fixed** | Moved to `market_structure_unknown_reason.go` |
+| No market structure counts as no data, so the coin passes | **Kept** | A product decision in the PRD that matches every existing rule: an exchange outage should not wipe out a whole round's candidates. With the budget and rate-limit fixes, missing data is now rare. |
+| Board clearing on no data lives only in the round | **Kept** | PRD Out of Scope: a manual single step does not clear the board. The second clear after a verdict that already reported no data is idempotent (see §9). |
+| A failed board clear leaves no durable failure record | **Kept** | The step's run truthfully ended with no data. The failed clear is reported in the round's stop reason, which is written to the service log, and the next round rewrites the board. Failing a run that succeeded would misreport the step. |

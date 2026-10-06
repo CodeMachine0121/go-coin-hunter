@@ -3,7 +3,7 @@
 Contract: PRD.md
 Design map: ARCH.md
 Implementation: `internal/`（handler、domains、service、application、infrastructure/analysis、config）、`cmd/server/dependencies.go`
-Oracle: Acceptance Criteria（31 scenarios）+ Core Business Rules（8）+ Non-Functional（2）= 41 clauses
+Oracle: Acceptance Criteria（33 scenarios）+ Core Business Rules（10）+ Non-Functional（3）= 46 clauses（v1.1 新增 AC-01.16、AC-01.17、BR-9、BR-10、NFR-3）
 
 > Static conformance audit: each test's assertions and each code path were judged against the spec oracle, not by suite pass/fail. Only the mapped single tests were run as corroboration (plus mutation checks during implementation).
 
@@ -34,7 +34,7 @@ The first pass found four non-conforming clauses. All four were fixed and re-ver
 | AC-01.10 | 交易所沒提供持倉量變化 | 無資料，理由「查不到持倉量 24 小時變化」 | `open_interest_change_filter_handler.go:28-30` | no open interest change is no data | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-01.11 | 資金費率正常，通過 | 通過 | `funding_rate_overheat_filter_handler.go:35` | `filter_handlers_test.go:183` an ordinary rate passes | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-01.12 | 資金費率剛好 0.1%，通過 | 通過 | 同上 | exactly the ceiling passes | asserts-oracle | produces-oracle | ✅ conforms |
-| AC-01.13 | 資金費率超過 0.1%，多方過熱淘汰 | 淘汰，理由「資金費率 0.11% 高於上限 0.1%」 | `funding_rate_overheat_filter_handler.go:35-38` | over the ceiling is rejected | asserts-oracle | produces-oracle | ✅ conforms |
+| AC-01.13 | 資金費率超過 0.1%，多方過熱淘汰（每 8 小時結算） | 淘汰，理由「資金費率 0.11% 高於上限 0.1%」 | `funding_rate_overheat_filter_handler.go` | over the ceiling is rejected；an 8-hour rate over the ceiling reads as it is | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-01.14 | 負資金費率不淘汰 | 通過 | `funding_rate_overheat_filter_handler.go:35` | a negative rate passes | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-01.15 | 交易所沒提供資金費率 | 無資料，理由「查不到資金費率」 | `funding_rate_overheat_filter_handler.go:28-30` | no funding rate is no data；`coin_filtering_application_test.go:676`（STRK） | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-02.1 | 只有看多的幣交給 CIO | CIO 只看到 PENGU；本輪裁決只有 PENGU | `bullish_focus_domain.go:25`；`hunt_verdict_service.go:83` | `hunt_verdict_application_test.go:404`（看空 STRK 不出現；只存看多的裁決） | asserts-oracle | produces-oracle | ✅ conforms |
@@ -53,6 +53,10 @@ The first pass found four non-conforming clauses. All four were fixed and re-ver
 | AC-05.2 | 探索沒有候選幣，結果表清空 | 回合停在探索；結果表為空 | 同上 | `hunt_pipeline_application_test.go:216` | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-05.3 | 洞察失敗，結果表保留 | 回合停在洞察；結果表未被改寫 | 同上（失敗不清空） | `hunt_pipeline_application_test.go:278`（嚴格 mock：任何改寫都會失敗） | asserts-oracle | produces-oracle | ✅ conforms |
 | AC-05.4 | 裁決失敗，結果表保留 | 回合停在裁決；結果表未被改寫 | 同上；`hunt_verdict_service.go` 失敗路徑不改寫 | `hunt_pipeline_application_test.go:306` + `hunt_verdict_application_test.go:181`（兩次不合格 → 失敗、不改寫） | asserts-oracle | produces-oracle | ✅ conforms |
+| AC-01.16 | 每小時結算的費率先折合成 8 小時再比較 | 淘汰，理由「資金費率每 1 小時 0.08%，折合每 8 小時 0.64%，高於上限 0.1%」 | `funding_rate_overheat_filter_handler.go` 折算分支 | `filter_handlers_test.go` an hourly rate is scaled to 8 hours before the ceiling | asserts-oracle | produces-oracle | ✅ conforms |
+| AC-01.17 | 每 4 小時結算、折合後剛好在上限，通過 | 通過 | 同上 | `filter_handlers_test.go` a 4-hour rate exactly at the scaled ceiling passes | asserts-oracle | produces-oracle | ✅ conforms |
+| BR-9 | 門檻防呆：強度夾 1–10、信心夾 0–100；漲跌幅下限高於上限時一起退回預設 | 同左 | `bullish_focus_domain.go`（建構子）；`application_config.go`（`parseDecimalRangeWithDefault`） | `hunt_verdicts_domain_test.go` KeepsItsThresholdsOnTheirScales；`application_config_test.go` FallsBackWhenThePriceChangeFloorIsAboveItsCeiling | asserts-oracle | produces-oracle | ✅ conforms |
+| BR-10 | 市場結構與其他來源並行、有自己的時間預算 | 其他來源用盡預算後仍取得市場結構 | `coin_profile_service.go`（`MarketStructureBudget`） | `coin_filtering_application_test.go` LooksUpMarketStructuresUnderTheirOwnBudget（改回共用預算即失敗，已驗證） | asserts-oracle | produces-oracle | ✅ conforms |
 | BR-1 | 動能門檻皆含邊界、可調整（−10%～+60%、≥−10%、≤0.1%） | 預設值如上，環境變數可覆寫，負值有效 | `application_config.go`（`parseDecimalWithDefault`） | `application_config_test.go:156` | asserts-oracle | produces-oracle | ✅ conforms |
 | BR-2 | 市場結構於過濾時取得，交易所失敗換下一家，全查不到記無資料，不讓整輪失敗 | 同左 | `coin_profile_service.go:106-115` + `perpetual_market_structure_service.go` | `coin_filtering_application_test.go:676`；`hunt_verdict_application_test.go` ShowsTheFirstExchange（同一服務的換家行為） | asserts-oracle | produces-oracle | ✅ conforms |
 | BR-3 | 看多洞察門檻：看多、強度 ≥ 6（可調整）、分析成功 | 同左 | `bullish_focus_domain.go:25-34`；`application_config.go` | `hunt_verdicts_domain_test.go:158`；`application_config_test.go:144` | asserts-oracle | produces-oracle | ✅ conforms |
@@ -62,6 +66,7 @@ The first pass found four non-conforming clauses. All four were fixed and re-ver
 | BR-7 | 裁決輪次狀態：無看多 → 無資料；CIO 可用且改寫成功 → 成功（即使沒有上表）；否則失敗 | 同左 | `pipeline_run_domain.go:68`；`hunt_verdict_service.go` | `hunt_verdicts_domain_test.go:144`；`hunt_verdict_application_test.go:423,447,181` | asserts-oracle | produces-oracle | ✅ conforms |
 | BR-8 | 回合：任一步無資料 → 停且清空；失敗 → 停且不動；清空失敗附註於原因 | 同左 | `hunt_pipeline_application.go:99-105` | `hunt_pipeline_application_test.go:216,232,246,265,278,306` | asserts-oracle | produces-oracle | ✅ conforms |
 | NFR-1 | 過濾時逐幣查詢市場結構需同時進行 | 多枚幣的查詢同時進行 | `coin_profile_service.go:110` | `coin_filtering_application_test.go:635`（序列化即失敗，已驗證） | asserts-oracle | produces-oracle | ✅ conforms |
+| NFR-3 | 共用同一個市場結構查詢，同時查詢的幣數有上限 | 同時查詢數不超過上限，全部仍取得結果 | `perpetual_market_structure_service.go`（`FindMarketStructures`）；`dependencies.go`（`perpetualMarketStructureServiceFor`） | `service/tests/perpetual_market_structure_service_test.go`（上限 2；移除上限即失敗，已驗證） | asserts-oracle | produces-oracle | ✅ conforms |
 | NFR-2 | 沒有看多洞察時不呼叫 CIO | CIO 呼叫 0 次 | `hunt_verdict_service.go:93-95` | `hunt_verdict_application_test.go:423`（`Times(0)`） | asserts-oracle | produces-oracle | ✅ conforms |
 
 ## Orphans (code with no clause)
@@ -75,7 +80,7 @@ None of the code touches an Out of Scope item: information sources, the analyst 
 
 ## Summary
 
-- Conforms: 41/41 clauses ✅ (100%), after the four fixes listed under "First pass and fixes"
+- Conforms: 46/46 clauses ✅ (100%), after the four fixes listed under "First pass and fixes" and the code review follow-up (ARCH §10)
 - Violations: none (AC-05.1 was resolved by correcting the PRD to the established format)
 - Mis-asserted: none (AC-04.3 and AC-05.3 tests strengthened)
 - Partial: none (NFR-1 test added)

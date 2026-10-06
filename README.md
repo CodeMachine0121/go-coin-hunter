@@ -69,7 +69,7 @@ make mock              # 重新產生 mock
 | `FILTER_MAXIMUM_UNLOCK_RATIO` | `0.05` | 觀察期內累計解鎖量占流通量的上限（達到即淘汰） |
 | `FILTER_MINIMUM_PRICE_CHANGE_RATIO` / `FILTER_MAXIMUM_PRICE_CHANGE_RATIO` | `-0.1` / `0.6` | 動能：永續合約 24 小時漲跌幅保留區間（比率，含兩端；跌太多或漲太多即淘汰） |
 | `FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO` | `-0.1` | 動能：持倉量 24 小時變化下限（比率，含） |
-| `FILTER_MAXIMUM_FUNDING_RATE` | `0.001` | 動能：每期資金費率上限（比率，含；0.001 即 0.1%） |
+| `FILTER_MAXIMUM_FUNDING_RATE` | `0.001` | 動能：折合每 8 小時的資金費率上限（比率，含；0.001 即 0.1%；每 1 / 4 小時結算的合約先折算再比較） |
 | `GOPLUS_BASE_URL` / `DEFILLAMA_DATASETS_BASE_URL` | 各官方網址 | 過濾資料來源網址 |
 | `ANTHROPIC_API_KEY` | 空 | **Claude API 金鑰（洞察需要；呼叫會產生費用）**。未設定時每枚幣都會分析失敗 |
 | `ANTHROPIC_BASE_URL` | 空（官方端點） | Claude API 位址（代理時覆寫） |
@@ -107,7 +107,7 @@ make mock              # 重新產生 mock
 | 流動性門檻、完全稀釋估值、流通比 | CoinGecko（優先）、DEX Screener（鏈上幣備援，無供給量） |
 | 解鎖時程 | DefiLlama 公開 emissions 資料集 |
 | 是否已上永續合約 | 幣安、Bybit、OKX 永續合約清單（只算加密原生 USDT 永續） |
-| 動能：24 小時漲跌幅、持倉量變化、資金費率過熱 | 幣安 → Bybit → OKX 取第一家有合約的永續合約市場結構（只查已上永續合約的幣，同時查詢；查不到記無資料、不淘汰） |
+| 動能：24 小時漲跌幅、持倉量變化、資金費率過熱 | 幣安 → Bybit → OKX 取第一家有合約的永續合約市場結構與資金費率結算週期（只查已上永續合約的幣；與其他來源並行、最多同時 5 枚、自有 60 秒預算；查不到記無資料、不淘汰） |
 
 ## AI 洞察
 

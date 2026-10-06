@@ -38,7 +38,8 @@
 | 動能規則 | `PriceChangeFilterHandler` / `OpenInterestChangeFilterHandler` / `FundingRateOverheatFilterHandler` | 動能 | 依此刻永續合約市場結構，在 AI 之前淘汰不利做多的候選幣的三條過濾規則；查不到市場結構或該數字時記「無資料」、不淘汰 | Confirmed |
 | 24 小時漲跌幅規則 | `PriceChangeFilterHandler` | 漲跌幅 | 24 小時漲跌幅須介於下限與上限之間（含兩端），預設 −10% ～ +60%：跌太多是下跌中，漲太多是追高 | Confirmed |
 | 持倉量變化規則 | `OpenInterestChangeFilterHandler` | 持倉變化 | 持倉量 24 小時變化須至少達下限（含），預設 −10%：減少更多代表資金撤離 | Confirmed |
-| 資金費率過熱規則 | `FundingRateOverheatFilterHandler` | 資金費率 | 每期資金費率須不高於上限（含），預設 0.1%：更高代表多方過度擁擠；負費率不淘汰 | Confirmed |
+| 資金費率過熱規則 | `FundingRateOverheatFilterHandler` | 資金費率 | 資金費率先依結算週期折合成每 8 小時，須不高於上限（含），預設 0.1%：更高代表多方過度擁擠；負費率不淘汰 | Confirmed |
+| 資金費率結算週期 | `PerpetualMarketStructureVo.FundingIntervalHours` | 結算週期 | 永續合約每幾小時結算一次資金費率（8、4 或 1）；同樣的每期費率，週期越短代表越擁擠。查不到時視為 8 小時 | Confirmed |
 | 洞察 | `CoinInsight` | 洞察 | AI 對一枚保留候選幣的結構化判斷：訊號方向、訊號強度、催化劑、主要風險、關鍵證據、資料缺口；或「分析失敗」及原因 | Confirmed |
 | 訊號方向 | `CoinInsightDirectionVo` | 方向 | **看多**、**看空**、**中性**；AI 回覆其他值一律中性 | Confirmed |
 | 訊號強度 | `CoinInsight.Strength` | 強度 | 1–10 的整數；超出夾回邊界 | Confirmed |

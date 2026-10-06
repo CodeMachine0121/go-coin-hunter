@@ -21,6 +21,8 @@ func TestNumberDescriptions(t *testing.T) {
 		{value: "9999", wantUsd: "9,999 美元", wantQuantity: "9,999", wantPercentage: "999900%"},
 		{value: "-25000", wantUsd: "-2.5 萬美元", wantQuantity: "-2.5 萬", wantPercentage: "-2500000%"},
 		{value: "0.105", wantUsd: "0.11 美元", wantQuantity: "0.11", wantPercentage: "10.5%"},
+		{value: "0.00102", wantUsd: "0 美元", wantQuantity: "0", wantPercentage: "0.102%"},
+		{value: "0.0000123456", wantUsd: "0 美元", wantQuantity: "0", wantPercentage: "0.0012%"},
 	}
 
 	for _, testCase := range testCases {

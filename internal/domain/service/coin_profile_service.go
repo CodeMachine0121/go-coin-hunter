@@ -25,6 +25,7 @@ type CoinProfileService struct {
 	tokenSecurityProxy              domaininterface.ITokenSecurityProxy
 	perpetualContractListingProxies []domaininterface.IPerpetualContractListingProxy
 	tokenUnlockScheduleProxy        domaininterface.ITokenUnlockScheduleProxy
+	perpetualMarketStructureService *PerpetualMarketStructureService
 	coinProfileTiming               vo.CoinProfileTimingVo
 }
 
@@ -34,6 +35,7 @@ func NewCoinProfileService(
 	tokenSecurityProxy domaininterface.ITokenSecurityProxy,
 	perpetualContractListingProxies []domaininterface.IPerpetualContractListingProxy,
 	tokenUnlockScheduleProxy domaininterface.ITokenUnlockScheduleProxy,
+	perpetualMarketStructureService *PerpetualMarketStructureService,
 	coinProfileTiming vo.CoinProfileTimingVo,
 ) *CoinProfileService {
 	return &CoinProfileService{
@@ -42,6 +44,7 @@ func NewCoinProfileService(
 		tokenSecurityProxy:              tokenSecurityProxy,
 		perpetualContractListingProxies: perpetualContractListingProxies,
 		tokenUnlockScheduleProxy:        tokenUnlockScheduleProxy,
+		perpetualMarketStructureService: perpetualMarketStructureService,
 		coinProfileTiming:               coinProfileTiming,
 	}
 }
@@ -160,6 +163,26 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		coinProfiles = append(coinProfiles, coinProfile)
 	}
 
+	// Market structure: only a coin with a perpetual has one. The lookups run beside the security and unlock lookups under
+	// their own budget, so neither eats the other's time; an exchange that cannot answer is no data for the momentum rules
+	// rather than a failed round, since it is per coin and not the whole round's footing.
+	perpetualCoinSymbols := []string{}
+	for _, coinProfile := range coinProfiles {
+		if len(coinProfile.PerpetualContractExchanges) > 0 {
+			perpetualCoinSymbols = append(perpetualCoinSymbols, coinProfile.CoinSymbol)
+		}
+	}
+	marketStructureContext, cancelMarketStructures := context.WithTimeout(executionContext, coinProfileService.coinProfileTiming.MarketStructureBudget)
+	defer cancelMarketStructures()
+	marketStructuresFound := make(chan map[string]vo.PerpetualMarketStructureVo, 1)
+	go func() {
+		if len(perpetualCoinSymbols) == 0 {
+			marketStructuresFound <- map[string]vo.PerpetualMarketStructureVo{}
+			return
+		}
+		marketStructuresFound <- coinProfileService.perpetualMarketStructureService.FindMarketStructures(marketStructureContext, perpetualCoinSymbols)
+	}()
+
 	securityLookupCount := 0
 	for _, coinProfile := range coinProfiles {
 		if coinProfile.ContractAddress != nil && len(coinProfile.PerpetualContractExchanges) > 0 {
@@ -203,6 +226,13 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 				coinProfiles[index].UnlockScheduleKnown = true
 				coinProfiles[index].UnlockEvents = unlockEvents
 			}
+		}
+	}
+
+	marketStructures := <-marketStructuresFound
+	for index := range coinProfiles {
+		if marketStructure, found := marketStructures[coinProfiles[index].CoinSymbol]; found {
+			coinProfiles[index].MarketStructure = &marketStructure
 		}
 	}
 

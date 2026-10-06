@@ -19,6 +19,7 @@ type ApplicationConfig struct {
 	Filtering             FilteringConfig
 	Insight               InsightConfig
 	Verdict               VerdictConfig
+	MarketStructure       MarketStructureConfig
 	// HuntPipelineInterval is how often the scheduled hunt round runs; zero or less switches the schedule off.
 	HuntPipelineInterval time.Duration
 	// ShutdownGracePeriod is how long shutdown waits for the step in flight before abandoning it; an abandoned step's
@@ -28,10 +29,13 @@ type ApplicationConfig struct {
 
 // VerdictConfig holds the chief investment officer's model settings; the API key is shared with the insight step.
 type VerdictConfig struct {
-	Model               string
-	Effort              string
-	SynthesisTimeout    time.Duration
-	MarketSourceTimeout time.Duration
+	Model            string
+	Effort           string
+	SynthesisTimeout time.Duration
+	// MinimumBullishInsightStrength is the weakest bullish insight still handed to the chief investment officer.
+	MinimumBullishInsightStrength int
+	// MinimumHuntBoardConfidence is the least confidence a long verdict needs to be put on the hunt board.
+	MinimumHuntBoardConfidence int
 }
 
 // InsightConfig holds the AI analyst's settings and the free material sources; the API key is read here and nowhere else.
@@ -72,6 +76,13 @@ func (databaseConfig DatabaseConfig) DataSourceName() string {
 	)
 }
 
+// MarketStructureConfig is how every step asks the exchanges about a perpetual: one timeout per exchange and a cap on
+// lookups at once, so a batch of coins stays inside the free request rates. Both are fixed rules, not operator settings.
+type MarketStructureConfig struct {
+	RequestTimeout           time.Duration
+	MaximumConcurrentLookups int
+}
+
 // DiscoveryConfig holds the discovery rules and where each free information source lives.
 type DiscoveryConfig struct {
 	Window               time.Duration
@@ -95,7 +106,14 @@ type FilteringConfig struct {
 	MinimumCirculatingRatio         decimal.Decimal
 	UnlockLookahead                 time.Duration
 	MaximumUnlockRatioOfCirculating decimal.Decimal
-	SourceRequestTimeout            time.Duration
+	// The momentum thresholds are ratios as the exchanges report them: -0.1 is a 10% fall, 0.001 a 0.1% funding rate.
+	MinimumPriceChangeRatio        decimal.Decimal
+	MaximumPriceChangeRatio        decimal.Decimal
+	MinimumOpenInterestChangeRatio decimal.Decimal
+	MaximumFundingRate             decimal.Decimal
+	// MarketStructureBudget bounds looking up every candidate's perpetual in one filtering round.
+	MarketStructureBudget time.Duration
+	SourceRequestTimeout  time.Duration
 	// RoundBaseBudget bounds gathering a round's data, before the allowance each security lookup adds.
 	RoundBaseBudget time.Duration
 	// TokenSecurityRequestInterval spaces token security lookups to stay inside the free request rate.
@@ -110,6 +128,12 @@ const (
 	informationSourceRequestTimeout = 15 * time.Second
 	// filteringSourceRequestTimeout is longer than discovery's: the coin list and contract lists are large answers.
 	filteringSourceRequestTimeout = 20 * time.Second
+	// filteringMarketStructureBudget is how long one filtering round may spend asking the exchanges about its perpetuals.
+	filteringMarketStructureBudget = 60 * time.Second
+	// marketStructureRequestTimeout bounds asking one exchange about one coin's perpetual, a small answer.
+	marketStructureRequestTimeout = 15 * time.Second
+	// marketStructureMaximumConcurrentLookups keeps a batch of coins well inside the exchanges' free request rates.
+	marketStructureMaximumConcurrentLookups = 5
 	// filteringRoundBaseBudget is the agreed round time before security lookups: 60 seconds.
 	filteringRoundBaseBudget = 60 * time.Second
 	// tokenSecurityRequestInterval keeps token security lookups near the free tier's thirty per minute.
@@ -125,6 +149,8 @@ const defaultExcludedCoinSymbols = "BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD
 
 // Load reads the process environment once at startup; every setting has a default so an empty .env still boots.
 func Load() ApplicationConfig {
+	minimumPriceChangeRatio, maximumPriceChangeRatio := parseDecimalRangeWithDefault(
+		os.Getenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO"), os.Getenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO"), "-0.1", "0.6")
 	return ApplicationConfig{
 		ServerAddress: cmp.Or(os.Getenv("SERVER_ADDRESS"), ":8080"),
 		Database: DatabaseConfig{
@@ -162,13 +188,18 @@ func Load() ApplicationConfig {
 			NewsLookback:                 72 * time.Hour,
 			MaterialSourceTimeout:        15 * time.Second,
 		},
+		MarketStructure: MarketStructureConfig{
+			RequestTimeout:           marketStructureRequestTimeout,
+			MaximumConcurrentLookups: marketStructureMaximumConcurrentLookups,
+		},
 		HuntPipelineInterval: time.Duration(parseIntWithDefault(os.Getenv("HUNT_PIPELINE_INTERVAL_HOURS"), 4)) * time.Hour,
 		ShutdownGracePeriod:  time.Duration(parsePositiveIntWithDefault(os.Getenv("SHUTDOWN_GRACE_MINUTES"), 15)) * time.Minute,
 		Verdict: VerdictConfig{
-			Model:               cmp.Or(os.Getenv("VERDICT_MODEL"), "claude-opus-5-5"),
-			Effort:              cmp.Or(os.Getenv("VERDICT_EFFORT"), "high"),
-			SynthesisTimeout:    verdictSynthesisTimeout,
-			MarketSourceTimeout: 15 * time.Second,
+			Model:                         cmp.Or(os.Getenv("VERDICT_MODEL"), "claude-opus-5-5"),
+			Effort:                        cmp.Or(os.Getenv("VERDICT_EFFORT"), "high"),
+			SynthesisTimeout:              verdictSynthesisTimeout,
+			MinimumBullishInsightStrength: parsePositiveIntWithDefault(os.Getenv("VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH"), 6),
+			MinimumHuntBoardConfidence:    parseIntWithDefault(os.Getenv("HUNT_BOARD_MINIMUM_CONFIDENCE"), 50),
 		},
 		Filtering: FilteringConfig{
 			MaximumTaxRate:                  parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_TAX_RATE"), "0.1"),
@@ -178,6 +209,11 @@ func Load() ApplicationConfig {
 			MinimumCirculatingRatio:         parsePositiveDecimalWithDefault(os.Getenv("FILTER_MINIMUM_CIRCULATING_RATIO"), "0.2"),
 			UnlockLookahead:                 time.Duration(parsePositiveIntWithDefault(os.Getenv("FILTER_UNLOCK_LOOKAHEAD_DAYS"), 14)) * 24 * time.Hour,
 			MaximumUnlockRatioOfCirculating: parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_UNLOCK_RATIO"), "0.05"),
+			MinimumPriceChangeRatio:         minimumPriceChangeRatio,
+			MaximumPriceChangeRatio:         maximumPriceChangeRatio,
+			MinimumOpenInterestChangeRatio:  parseDecimalWithDefault(os.Getenv("FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO"), "-0.1"),
+			MaximumFundingRate:              parseDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_FUNDING_RATE"), "0.001"),
+			MarketStructureBudget:           filteringMarketStructureBudget,
 			SourceRequestTimeout:            filteringSourceRequestTimeout,
 			RoundBaseBudget:                 filteringRoundBaseBudget,
 			TokenSecurityRequestInterval:    tokenSecurityRequestInterval,
@@ -224,6 +260,27 @@ func parsePositiveDecimalWithDefault(rawValue string, defaultValue string) decim
 	}
 
 	return parsedValue
+}
+
+// parseDecimalWithDefault falls back only on a typo or an empty value; zero and negatives are kept, as thresholds.
+func parseDecimalWithDefault(rawValue string, defaultValue string) decimal.Decimal {
+	parsedValue, parseError := decimal.NewFromString(strings.TrimSpace(rawValue))
+	if parseError != nil {
+		return decimal.RequireFromString(defaultValue)
+	}
+
+	return parsedValue
+}
+
+// parseDecimalRangeWithDefault reads a floor and a ceiling; a floor above its ceiling would reject everything, so the
+// pair falls back to the defaults together.
+func parseDecimalRangeWithDefault(rawMinimum string, rawMaximum string, defaultMinimum string, defaultMaximum string) (decimal.Decimal, decimal.Decimal) {
+	minimum, maximum := parseDecimalWithDefault(rawMinimum, defaultMinimum), parseDecimalWithDefault(rawMaximum, defaultMaximum)
+	if minimum.GreaterThan(maximum) {
+		return decimal.RequireFromString(defaultMinimum), decimal.RequireFromString(defaultMaximum)
+	}
+
+	return minimum, maximum
 }
 
 func parseCommaSeparated(rawValue string) []string {

@@ -38,6 +38,7 @@ type huntPipelineWorld struct {
 	storedFilterResults     []entities.CoinFilterResult
 	storedInsights          []entities.CoinInsight
 	insightSaveError        error
+	boardRewrites           [][]entities.HuntBoardEntry
 }
 
 func (world *huntPipelineWorld) latestSucceeded(step string) (entities.PipelineRun, bool) {
@@ -150,12 +151,13 @@ func newHuntPipelineWorld(t *testing.T) *huntPipelineWorld {
 
 	clockProxy := mocks.NewMockIClockProxy(controller)
 	clockProxy.EXPECT().Now().Return(roundStartedAt).AnyTimes()
-	marketStructureService := service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{market}, time.Second)
+	marketStructureService := service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{market}, time.Second, 5)
 	world.huntPipelineApplication = application.NewHuntPipelineApplication(
 		service.NewCoinDiscoveryService([]domaininterface.IInformationSourceProxy{world.informationSource}, pipelineRuns, outcomes, intelligences, candidates, clockProxy, discoveryPolicy()),
 		service.NewCoinFilteringService(pipelineRuns, candidates, world.coinFilterResults,
 			service.NewCoinProfileService(intelligences, []domaininterface.ICoinMarketDataProxy{marketData}, security,
-				[]domaininterface.IPerpetualContractListingProxy{listing}, unlocks, profileTiming(time.Second)),
+				[]domaininterface.IPerpetualContractListingProxy{listing}, unlocks,
+				service.NewPerpetualMarketStructureService(nil, time.Second, 5), profileTiming(time.Second)),
 			[]domaininterface.ICoinCandidateFilterHandler{handler.NewPerpetualContractListingFilterHandler()}, clockProxy),
 		service.NewCoinInsightService(pipelineRuns, candidates, world.coinFilterResults, insights,
 			service.NewCoinInsightMaterialService(intelligences, news, marketStructureService, insightPolicy()), world.analyst, clockProxy, insightPolicy()),
@@ -163,6 +165,14 @@ func newHuntPipelineWorld(t *testing.T) *huntPipelineWorld {
 	)
 
 	return world
+}
+
+// expectTheBoardRewritten answers every rewrite of the board with the given error and keeps what each rewrite held.
+func (world *huntPipelineWorld) expectTheBoardRewritten(rewriteError error) {
+	world.huntBoard.EXPECT().Rewrite(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, entries []entities.HuntBoardEntry) error {
+		world.boardRewrites = append(world.boardRewrites, entries)
+		return rewriteError
+	}).MinTimes(1)
 }
 
 func (world *huntPipelineWorld) discoveryFinds(coinSymbols ...string) {
@@ -203,9 +213,10 @@ func TestRunHuntRoundRunsEveryStepInOrder(t *testing.T) {
 }
 
 func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
-	t.Run("discovery with no data", func(t *testing.T) {
+	t.Run("discovery with no data empties the board", func(t *testing.T) {
 		world := newHuntPipelineWorld(t)
 		world.discoveryFinds()
+		world.expectTheBoardRewritten(nil)
 
 		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
 		require.NoError(t, roundError)
@@ -215,11 +226,13 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 		assert.Equal(t, "探索未成功：noData", huntRound.StoppedReason)
 		assert.Equal(t, []string{"discovery:job"}, world.stepsRun())
 		assert.Len(t, huntRound.Steps, 1)
+		assert.Equal(t, [][]entities.HuntBoardEntry{{}}, world.boardRewrites)
 	})
 
-	t.Run("filtering keeping nothing", func(t *testing.T) {
+	t.Run("filtering keeping nothing empties the board", func(t *testing.T) {
 		world := newHuntPipelineWorld(t)
 		world.discoveryFinds("DOUU")
+		world.expectTheBoardRewritten(nil)
 
 		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
 		require.NoError(t, roundError)
@@ -227,6 +240,52 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 		assert.Equal(t, "filtering", huntRound.StoppedStep)
 		assert.Equal(t, "過濾未成功：noData", huntRound.StoppedReason)
 		assert.Equal(t, []string{"discovery:job", "filtering:job"}, world.stepsRun())
+		assert.Equal(t, [][]entities.HuntBoardEntry{{}}, world.boardRewrites)
+	})
+
+	t.Run("a verdict without a bullish insight empties the board", func(t *testing.T) {
+		world := newHuntPipelineWorld(t)
+		world.discoveryFinds("ZORA")
+		bearish := bullishAnswer()
+		bearish.Direction = "bearish"
+		world.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(bearish, nil)
+		world.expectTheBoardRewritten(nil)
+
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
+
+		assert.Equal(t, "verdict", huntRound.StoppedStep)
+		assert.Equal(t, "裁決未成功：noData", huntRound.StoppedReason)
+		assert.NotEmpty(t, world.boardRewrites)
+		for _, boardRewrite := range world.boardRewrites {
+			assert.Empty(t, boardRewrite)
+		}
+	})
+
+	t.Run("a board that cannot be emptied is told in the reason", func(t *testing.T) {
+		world := newHuntPipelineWorld(t)
+		world.discoveryFinds()
+		world.expectTheBoardRewritten(errors.New("rewrite hunt board: disk full"))
+
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
+
+		assert.Equal(t, "discovery", huntRound.StoppedStep)
+		assert.Equal(t, "探索未成功：noData；清空獵捕結果表失敗：rewrite hunt board: disk full", huntRound.StoppedReason)
+	})
+
+	// A failed step never touches the board: the strict board mock refuses any rewrite here.
+	t.Run("every coin's analysis failing leaves the board", func(t *testing.T) {
+		world := newHuntPipelineWorld(t)
+		world.discoveryFinds("ZORA")
+		world.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(vo.CoinInsightAnswerVo{}, errors.New("overloaded")).AnyTimes()
+
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
+
+		assert.Equal(t, "insight", huntRound.StoppedStep)
+		assert.Equal(t, "洞察未成功：failed", huntRound.StoppedReason)
+		assert.Nil(t, world.boardRewrites)
 	})
 
 	t.Run("insight failing as a step error", func(t *testing.T) {
@@ -308,6 +367,8 @@ func TestRunHuntRoundStartsNoStepOnceAskedToStop(t *testing.T) {
 
 func TestRunHuntRoundRefusesASecondRoundWhileOneIsRunning(t *testing.T) {
 	world := newHuntPipelineWorld(t)
+	// Both rounds discover nothing, so each empties the board.
+	world.expectTheBoardRewritten(nil)
 	inDiscovery := make(chan struct{})
 	release := make(chan struct{})
 	world.informationSource.EXPECT().FetchInformationItems(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -363,6 +424,7 @@ func TestRunHuntRoundLeavesOneLogLinePerRound(t *testing.T) {
 	t.Run("a stopped round", func(t *testing.T) {
 		world := newHuntPipelineWorld(t)
 		world.discoveryFinds()
+		world.expectTheBoardRewritten(nil)
 		logBuffer := capturedLog(t)
 
 		_, _ = world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)

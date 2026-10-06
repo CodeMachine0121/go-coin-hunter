@@ -37,8 +37,24 @@
       "name": "Run a whole hunt round (manual)",
       "request": {
         "method": "POST",
-        "url": "{{baseUrl}}/hunt-rounds"
-      }
+        "url": "{{baseUrl}}/hunt-rounds",
+        "description": "Runs discovery → filtering → insight → verdict once. A step that ends with noData stops the round and empties the hunt board (nothing worth going long this round); a failed step stops the round and leaves the board as it was."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('a round reports its steps', () => {",
+              "  const round = pm.response.json();",
+              "  pm.expect(round.steps).to.be.an('array');",
+              "  if (!round.completed) { pm.expect(round.stoppedReason).to.be.a('string').and.not.empty; }",
+              "});"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Discovery",
@@ -104,8 +120,26 @@
           "name": "Latest kept coin candidates",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/coin-filter-results/latest-kept"
-          }
+            "url": "{{baseUrl}}/coin-filter-results/latest-kept",
+            "description": "Kept candidates of the newest successful filtering, each with every rule's verdict — including the momentum rules priceChange, openInterestChange and fundingRateOverheat, judged from the perpetual as it trades now."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('every kept coin was judged on momentum', () => {",
+                  "  pm.response.json().forEach(result => {",
+                  "    const names = result.verdicts.map(verdict => verdict.filterName);",
+                  "    pm.expect(names).to.include.members(['priceChange', 'openInterestChange', 'fundingRateOverheat']);",
+                  "    result.verdicts.forEach(verdict => pm.expect(verdict.outcome).to.not.equal('rejected'));",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Coin filter results of a run",
@@ -161,7 +195,8 @@
           "name": "Synthesize hunt verdicts (manual)",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/hunt-verdicts"
+            "url": "{{baseUrl}}/hunt-verdicts",
+            "description": "Asks the CIO about the bullish insights (strength at or over VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH) of the newest successful insight round; the CIO answers long, watch or avoid — never short. Without a bullish insight the CIO is not asked, the run is noData and the hunt board is emptied."
           },
           "event": [
             {
@@ -180,14 +215,34 @@
           "name": "Hunt board",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/hunt-board"
-          }
+            "url": "{{baseUrl}}/hunt-board",
+            "description": "Only long verdicts at or over HUNT_BOARD_MINIMUM_CONFIDENCE, highest confidence first. An empty board means the latest clean round found nothing worth going long; check GET /pipeline-runs to tell that apart from a failed round."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the board holds confident longs only', () => {",
+                  "  const board = pm.response.json();",
+                  "  pm.expect(board).to.be.an('array');",
+                  "  board.forEach(entry => {",
+                  "    pm.expect(entry.action).to.equal('long');",
+                  "    pm.expect(entry.stopLossPrice).to.not.be.null;",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Coin verdicts of a run",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/pipeline-runs/{{verdictRunId}}/coin-verdicts"
+            "url": "{{baseUrl}}/pipeline-runs/{{verdictRunId}}/coin-verdicts",
+            "description": "Every verdict of that verdict run, kept as history: longs, watches, avoids and longs under the board's confidence floor."
           }
         }
       ]

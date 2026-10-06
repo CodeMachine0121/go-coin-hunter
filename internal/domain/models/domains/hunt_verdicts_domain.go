@@ -60,7 +60,7 @@ func (huntVerdictsDomain HuntVerdictsDomain) ToCoinVerdicts(pipelineRunID uint) 
 		if action == vo.HuntActionWatch || action == vo.HuntActionAvoid {
 			coinVerdict.Action = string(action)
 		}
-		if action != vo.HuntActionLong && action != vo.HuntActionShort {
+		if action != vo.HuntActionLong {
 			coinVerdicts = append(coinVerdicts, coinVerdict)
 			continue
 		}
@@ -76,17 +76,9 @@ func (huntVerdictsDomain HuntVerdictsDomain) ToCoinVerdicts(pipelineRunID uint) 
 		}
 
 		stopLossRatio := decimal.Max(policy.MinimumStopLossPercent, decimal.Min(policy.MaximumStopLossPercent, answer.StopLossPercent)).Div(percentPerUnit)
-		maximumTakeProfitPercent := policy.MaximumTakeProfitPercent
-		if action == vo.HuntActionShort {
-			maximumTakeProfitPercent = decimal.Min(maximumTakeProfitPercent, policy.MaximumShortTakeProfitPercent)
-		}
-		takeProfitRatio := decimal.Max(policy.MinimumTakeProfitPercent, decimal.Min(maximumTakeProfitPercent, answer.TakeProfitPercent)).Div(percentPerUnit)
+		takeProfitRatio := decimal.Max(policy.MinimumTakeProfitPercent, decimal.Min(policy.MaximumTakeProfitPercent, answer.TakeProfitPercent)).Div(percentPerUnit)
 		stopLossPrice := lastPrice.Mul(decimal.NewFromInt(1).Sub(stopLossRatio))
 		takeProfitPrice := lastPrice.Mul(decimal.NewFromInt(1).Add(takeProfitRatio))
-		if action == vo.HuntActionShort {
-			stopLossPrice = lastPrice.Mul(decimal.NewFromInt(1).Add(stopLossRatio))
-			takeProfitPrice = lastPrice.Mul(decimal.NewFromInt(1).Sub(takeProfitRatio))
-		}
 		referencePrice := *lastPrice
 		coinVerdict.Action = string(action)
 		coinVerdict.Leverage = min(max(answer.Leverage, policy.MinimumLeverage), policy.MaximumLeverage)

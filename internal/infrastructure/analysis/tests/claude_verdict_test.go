@@ -80,6 +80,9 @@ func TestClaudeStrategistReadsVerdictsAndAsksInTheAgreedShape(t *testing.T) {
 	outputConfig := fakeApi.lastBody["output_config"].(map[string]any)
 	assert.Equal(t, "high", outputConfig["effort"])
 	assert.Equal(t, "json_schema", outputConfig["format"].(map[string]any)["type"])
+	verdictSchema := outputConfig["format"].(map[string]any)["schema"].(map[string]any)["properties"].(map[string]any)["verdicts"].(map[string]any)["items"].(map[string]any)
+	assert.Equal(t, []any{"long", "watch", "avoid"}, verdictSchema["properties"].(map[string]any)["action"].(map[string]any)["enum"],
+		"the hunt only goes long, so the strategist cannot answer short")
 	assert.Equal(t, "ephemeral", fakeApi.lastBody["system"].([]any)[0].(map[string]any)["cache_control"].(map[string]any)["type"])
 	userText := fakeApi.lastBody["messages"].([]any)[0].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
 	materials := []map[string]any{}
@@ -87,6 +90,7 @@ func TestClaudeStrategistReadsVerdictsAndAsksInTheAgreedShape(t *testing.T) {
 	assert.Equal(t, "PENGU", materials[0]["coinSymbol"])
 	assert.Equal(t, "0.0097", materials[0]["marketStructure"].(map[string]any)["lastPrice"])
 	assert.Nil(t, materials[0]["marketStructure"].(map[string]any)["fundingRate"])
+	assert.Nil(t, materials[0]["marketStructure"].(map[string]any)["fundingIntervalHours"])
 }
 
 func TestClaudeStrategistTellsUnusableAnswersFromServiceErrors(t *testing.T) {

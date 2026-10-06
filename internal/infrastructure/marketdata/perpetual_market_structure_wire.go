@@ -10,6 +10,12 @@ type binancePremiumIndexWire struct {
 	LastFundingRate *jsonDecimal `json:"lastFundingRate"`
 }
 
+// binanceFundingInfoWire lists only the contracts whose funding was adjusted away from the default 8-hour period.
+type binanceFundingInfoWire struct {
+	Symbol               string `json:"symbol"`
+	FundingIntervalHours int    `json:"fundingIntervalHours"`
+}
+
 type binanceOpenInterestHistoryWire struct {
 	SumOpenInterestValue *jsonDecimal `json:"sumOpenInterestValue"`
 	Timestamp            int64        `json:"timestamp"`
@@ -24,6 +30,16 @@ type bybitTickersWire struct {
 			Turnover24h       *jsonDecimal `json:"turnover24h"`
 			FundingRate       *jsonDecimal `json:"fundingRate"`
 			OpenInterestValue *jsonDecimal `json:"openInterestValue"`
+		} `json:"list"`
+	} `json:"result"`
+}
+
+// bybitInstrumentWire gives the funding period in minutes.
+type bybitInstrumentWire struct {
+	ReturnCode *int `json:"retCode"`
+	Result     struct {
+		List []struct {
+			FundingInterval int `json:"fundingInterval"`
 		} `json:"list"`
 	} `json:"result"`
 }
@@ -52,8 +68,11 @@ type okxTickerWire struct {
 	VolumeCurrency24h *jsonDecimal `json:"volCcy24h"`
 }
 
+// okxFundingRateWire times are milliseconds written as text; the gap between them is the funding period.
 type okxFundingRateWire struct {
-	FundingRate *jsonDecimal `json:"fundingRate"`
+	FundingRate     *jsonDecimal `json:"fundingRate"`
+	FundingTime     *jsonDecimal `json:"fundingTime"`
+	NextFundingTime *jsonDecimal `json:"nextFundingTime"`
 }
 
 type okxOpenInterestWire struct {

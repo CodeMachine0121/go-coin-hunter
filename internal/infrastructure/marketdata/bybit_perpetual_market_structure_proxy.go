@@ -43,6 +43,12 @@ func (bybitPerpetualMarketStructureProxy *BybitPerpetualMarketStructureProxy) Fi
 		return vo.PerpetualMarketStructureVo{}, false, openInterestError
 	}
 
+	instruments, instrumentError := utilities.GetJson[bybitInstrumentWire](executionContext, bybitPerpetualMarketStructureProxy.httpClient,
+		bybitPerpetualMarketStructureProxy.baseUrl+"/v5/market/instruments-info?category=linear&symbol="+contractSymbol)
+	if instrumentError != nil {
+		return vo.PerpetualMarketStructureVo{}, false, instrumentError
+	}
+
 	ticker := tickers.Result.List[0]
 	marketStructure := vo.PerpetualMarketStructureVo{
 		ExchangeName:        "Bybit",
@@ -51,6 +57,10 @@ func (bybitPerpetualMarketStructureProxy *BybitPerpetualMarketStructureProxy) Fi
 		QuoteVolumeUsd24h:   ticker.Turnover24h.decimalOrNil(),
 		FundingRate:         ticker.FundingRate.decimalOrNil(),
 		OpenInterestUsd:     ticker.OpenInterestValue.decimalOrNil(),
+	}
+	if len(instruments.Result.List) > 0 && instruments.Result.List[0].FundingInterval > 0 {
+		fundingIntervalHours := instruments.Result.List[0].FundingInterval / 60
+		marketStructure.FundingIntervalHours = &fundingIntervalHours
 	}
 	readings := openInterest.Result.List
 	// Readings arrive newest first; they are put oldest first so the change runs forward in time.

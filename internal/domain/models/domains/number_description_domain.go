@@ -41,9 +41,10 @@ func (numberDescriptionDomain NumberDescriptionDomain) AsTokenQuantity() string 
 	return figure + " " + unit
 }
 
-// AsPercentage reads the value as a ratio: 0.105 is 10.5%.
+// AsPercentage reads the value as a ratio: 0.105 is 10.5%. It keeps four decimals so a funding rate just over its
+// ceiling (0.102%) never reads as the ceiling itself.
 func (numberDescriptionDomain NumberDescriptionDomain) AsPercentage() string {
-	return numberDescriptionDomain.value.Mul(hundred).Round(2).String() + "%"
+	return numberDescriptionDomain.value.Mul(hundred).Round(4).String() + "%"
 }
 
 // scaled picks 億 from a hundred million and 萬 from ten thousand, keeps at most two decimals and groups thousands.

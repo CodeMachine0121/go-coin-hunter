@@ -23,7 +23,7 @@ func TestPerpetualMarketStructureExchangesAreListedInPreferenceOrder(t *testing.
 }
 
 func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
-	huntVerdictPolicy := huntVerdictPolicyFor()
+	huntVerdictPolicy := huntVerdictPolicyFor(config.VerdictConfig{MinimumBullishInsightStrength: 6, MinimumHuntBoardConfidence: 50})
 
 	assert.Equal(t, 1, huntVerdictPolicy.MinimumLeverage)
 	assert.Equal(t, 5, huntVerdictPolicy.MaximumLeverage)
@@ -32,7 +32,18 @@ func TestVerdictsAreClampedIntoTheAgreedSafeRanges(t *testing.T) {
 	assert.Equal(t, "50", huntVerdictPolicy.MaximumStopLossPercent.String())
 	assert.Equal(t, "1", huntVerdictPolicy.MinimumTakeProfitPercent.String())
 	assert.Equal(t, "200", huntVerdictPolicy.MaximumTakeProfitPercent.String())
-	assert.Equal(t, "90", huntVerdictPolicy.MaximumShortTakeProfitPercent.String())
+	assert.Equal(t, 6, huntVerdictPolicy.MinimumBullishInsightStrength)
+	assert.Equal(t, 50, huntVerdictPolicy.MinimumHuntBoardConfidence)
+}
+
+func TestEveryFilteringRuleIsPluggedIn(t *testing.T) {
+	filterNames := []string{}
+	for _, filterHandler := range filterHandlersFor(config.FilteringConfig{}) {
+		filterNames = append(filterNames, filterHandler.FilterName())
+	}
+
+	assert.Equal(t, []string{"securityCheck", "liquidityThreshold", "fullyDilutedValuation", "circulatingRatio", "unlockSchedule",
+		"perpetualContractListing", "priceChange", "openInterestChange", "fundingRateOverheat"}, filterNames)
 }
 
 func TestEachClaudeCapabilityKeepsItsOwnSettings(t *testing.T) {

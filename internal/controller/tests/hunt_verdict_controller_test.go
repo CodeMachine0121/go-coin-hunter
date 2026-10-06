@@ -42,7 +42,7 @@ func newVerdictRoutesUnderTest(t *testing.T) verdictRoutesUnderTest {
 	clockProxy.EXPECT().Now().Return(time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)).AnyTimes()
 	huntVerdictController := controller.NewHuntVerdictController(application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 		underTest.pipelineRunRepository, underTest.coinInsightRepository, underTest.coinVerdictRepository, underTest.huntBoardRepository,
-		service.NewPerpetualMarketStructureService(nil, time.Second), underTest.strategist, clockProxy, vo.HuntVerdictPolicyVo{})))
+		service.NewPerpetualMarketStructureService(nil, time.Second, 5), underTest.strategist, clockProxy, vo.HuntVerdictPolicyVo{})))
 	underTest.engine.POST("/hunt-verdicts", huntVerdictController.SynthesizeHuntVerdicts)
 	underTest.engine.GET("/hunt-board", huntVerdictController.GetHuntBoard)
 	underTest.engine.GET("/pipeline-runs/:pipelineRunId/coin-verdicts", huntVerdictController.GetCoinVerdictsOfPipelineRun)
@@ -64,7 +64,8 @@ func TestVerdictRoutes(t *testing.T) {
 	t.Run("a finished round answers with its run", func(t *testing.T) {
 		underTest := newVerdictRoutesUnderTest(t)
 		underTest.pipelineRunRepository.EXPECT().FindLatestSucceeded(gomock.Any(), gomock.Any()).Return(entities.PipelineRun{ID: 9}, true, nil)
-		underTest.coinInsightRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return(nil, nil)
+		underTest.coinInsightRepository.EXPECT().FindByPipelineRunID(gomock.Any(), uint(9)).Return([]entities.CoinInsight{
+			{CoinSymbol: "PENGU", Succeeded: true, Direction: "bullish", Strength: 7}}, nil)
 		underTest.pipelineRunRepository.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ any, pipelineRun entities.PipelineRun) (entities.PipelineRun, error) {
 				pipelineRun.ID = 13

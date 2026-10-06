@@ -26,11 +26,13 @@ type HeadlineVo struct {
 
 // PerpetualMarketStructureVo is one exchange's USDT perpetual for the coin; a nil figure is unknown there.
 type PerpetualMarketStructureVo struct {
-	ExchangeName               string
-	LastPrice                  *decimal.Decimal
-	PriceChangeRatio24h        *decimal.Decimal
-	QuoteVolumeUsd24h          *decimal.Decimal
-	FundingRate                *decimal.Decimal
+	ExchangeName        string
+	LastPrice           *decimal.Decimal
+	PriceChangeRatio24h *decimal.Decimal
+	QuoteVolumeUsd24h   *decimal.Decimal
+	FundingRate         *decimal.Decimal
+	// FundingIntervalHours is how many hours one funding period spans: exchanges settle every 8, 4 or 1 hours.
+	FundingIntervalHours       *int
 	OpenInterestUsd            *decimal.Decimal
 	OpenInterestChangeRatio24h *decimal.Decimal
 }

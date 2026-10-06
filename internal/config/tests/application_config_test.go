@@ -80,9 +80,11 @@ func TestLoadReadsTheShutdownGracePeriod(t *testing.T) {
 func TestLoadVerdictSettings(t *testing.T) {
 	t.Setenv("VERDICT_MODEL", "")
 	t.Setenv("VERDICT_EFFORT", "")
+	t.Setenv("VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH", "")
+	t.Setenv("HUNT_BOARD_MINIMUM_CONFIDENCE", "")
 
 	assert.Equal(t, config.VerdictConfig{Model: "claude-opus-5-5", Effort: "high", SynthesisTimeout: 180 * time.Second,
-		MarketSourceTimeout: 15 * time.Second}, config.Load().Verdict)
+		MinimumBullishInsightStrength: 6, MinimumHuntBoardConfidence: 50}, config.Load().Verdict)
 
 	t.Setenv("VERDICT_MODEL", "claude-sonnet-5-5")
 	t.Setenv("VERDICT_EFFORT", "xhigh")
@@ -137,4 +139,55 @@ func TestLoadKeepsTheSourceLimitAndTimeoutFixed(t *testing.T) {
 
 	assert.Equal(t, 50, applicationConfig.Discovery.ItemLimitPerSource)
 	assert.Equal(t, 15*time.Second, applicationConfig.Discovery.SourceRequestTimeout)
+}
+
+func TestLoadReadsTheBullishFocusThresholds(t *testing.T) {
+	t.Setenv("VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH", "8")
+	t.Setenv("HUNT_BOARD_MINIMUM_CONFIDENCE", "0")
+	assert.Equal(t, 8, config.Load().Verdict.MinimumBullishInsightStrength)
+	assert.Equal(t, 0, config.Load().Verdict.MinimumHuntBoardConfidence)
+
+	t.Setenv("VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH", "0")
+	t.Setenv("HUNT_BOARD_MINIMUM_CONFIDENCE", "sure")
+	assert.Equal(t, 6, config.Load().Verdict.MinimumBullishInsightStrength)
+	assert.Equal(t, 50, config.Load().Verdict.MinimumHuntBoardConfidence)
+}
+
+func TestLoadReadsTheMomentumThresholds(t *testing.T) {
+	for _, name := range []string{"FILTER_MINIMUM_PRICE_CHANGE_RATIO", "FILTER_MAXIMUM_PRICE_CHANGE_RATIO",
+		"FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO", "FILTER_MAXIMUM_FUNDING_RATE"} {
+		t.Setenv(name, "")
+	}
+	filteringConfig := config.Load().Filtering
+
+	assert.Equal(t, "-0.1", filteringConfig.MinimumPriceChangeRatio.String())
+	assert.Equal(t, "0.6", filteringConfig.MaximumPriceChangeRatio.String())
+	assert.Equal(t, "-0.1", filteringConfig.MinimumOpenInterestChangeRatio.String())
+	assert.Equal(t, "0.001", filteringConfig.MaximumFundingRate.String())
+	assert.Equal(t, 60*time.Second, filteringConfig.MarketStructureBudget)
+	assert.Equal(t, config.MarketStructureConfig{RequestTimeout: 15 * time.Second, MaximumConcurrentLookups: 5}, config.Load().MarketStructure)
+
+	t.Setenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO", "-0.2")
+	t.Setenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO", "1")
+	t.Setenv("FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO", "0")
+	t.Setenv("FILTER_MAXIMUM_FUNDING_RATE", "a lot")
+	filteringConfig = config.Load().Filtering
+
+	assert.Equal(t, "-0.2", filteringConfig.MinimumPriceChangeRatio.String())
+	assert.Equal(t, "1", filteringConfig.MaximumPriceChangeRatio.String())
+	assert.Equal(t, "0", filteringConfig.MinimumOpenInterestChangeRatio.String())
+	assert.Equal(t, "0.001", filteringConfig.MaximumFundingRate.String())
+}
+
+func TestLoadFallsBackWhenThePriceChangeFloorIsAboveItsCeiling(t *testing.T) {
+	t.Setenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO", "0.5")
+	t.Setenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO", "0.2")
+
+	filteringConfig := config.Load().Filtering
+
+	assert.Equal(t, "-0.1", filteringConfig.MinimumPriceChangeRatio.String())
+	assert.Equal(t, "0.6", filteringConfig.MaximumPriceChangeRatio.String())
+
+	t.Setenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO", "0.2")
+	assert.Equal(t, "0.2", config.Load().Filtering.MinimumPriceChangeRatio.String(), "a floor equal to its ceiling is kept")
 }

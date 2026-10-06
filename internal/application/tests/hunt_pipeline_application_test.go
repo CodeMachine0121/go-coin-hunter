@@ -275,6 +275,19 @@ func TestRunHuntRoundStopsAtTheFirstStepThatDoesNotSucceed(t *testing.T) {
 	})
 
 	// A failed step never touches the board: the strict board mock refuses any rewrite here.
+	t.Run("every coin's analysis failing leaves the board", func(t *testing.T) {
+		world := newHuntPipelineWorld(t)
+		world.discoveryFinds("ZORA")
+		world.analyst.EXPECT().AnalyzeCoin(gomock.Any(), gomock.Any()).Return(vo.CoinInsightAnswerVo{}, errors.New("overloaded")).AnyTimes()
+
+		huntRound, roundError := world.huntPipelineApplication.RunHuntRound(context.Background(), nil, vo.PipelineRunTriggerSourceJob)
+		require.NoError(t, roundError)
+
+		assert.Equal(t, "insight", huntRound.StoppedStep)
+		assert.Equal(t, "洞察未成功：failed", huntRound.StoppedReason)
+		assert.Nil(t, world.boardRewrites)
+	})
+
 	t.Run("insight failing as a step error", func(t *testing.T) {
 		world := newHuntPipelineWorld(t)
 		world.discoveryFinds("ZORA")

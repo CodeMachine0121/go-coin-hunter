@@ -632,6 +632,47 @@ func TestFilterCoinCandidatesStaysInsideTheRoundBudget(t *testing.T) {
 	assert.Equal(t, "資料來源無法取得：goPlusTokenSecurity（連線逾時）", pipelineRun.FailureReason)
 }
 
+func TestFilterCoinCandidatesAsksForEveryCoinsMarketStructureAtOnce(t *testing.T) {
+	underTest := newCoinFilteringUnderTest(t, "PENGU", "STRK")
+	underTest.answerMarketData(map[string]vo.CoinMarketDataVo{"PENGU": healthyMarketData("pengu"), "STRK": healthyMarketData("strk")}, map[string]vo.CoinMarketDataVo{})
+	underTest.answerListings(map[string]bool{"PENGU": true, "STRK": true}, map[string]bool{}, map[string]bool{})
+	underTest.answerUnlocks(map[string][]vo.TokenUnlockEventVo{})
+	risingRatio := decimal.RequireFromString("0.12")
+	// The exchange answers only once both coins are being asked: one at a time, the first lookup would time out.
+	bothAsked := sync.WaitGroup{}
+	bothAsked.Add(2)
+	barrierProxy := mocks.NewMockIPerpetualMarketStructureProxy(gomock.NewController(t))
+	barrierProxy.EXPECT().FindMarketStructure(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(lookupContext context.Context, coinSymbol string) (vo.PerpetualMarketStructureVo, bool, error) {
+			bothAsked.Done()
+			waited := make(chan struct{})
+			go func() { bothAsked.Wait(); close(waited) }()
+			select {
+			case <-waited:
+				return vo.PerpetualMarketStructureVo{ExchangeName: "幣安", PriceChangeRatio24h: &risingRatio}, true, nil
+			case <-lookupContext.Done():
+				return vo.PerpetualMarketStructureVo{}, false, lookupContext.Err()
+			}
+		}).Times(2)
+	underTest.marketStructureService = service.NewPerpetualMarketStructureService(
+		[]domaininterface.IPerpetualMarketStructureProxy{barrierProxy}, 500*time.Millisecond)
+	clockProxy := mocks.NewMockIClockProxy(gomock.NewController(t))
+	clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
+	coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
+		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResults,
+		service.NewCoinProfileService(underTest.coinIntelligences,
+			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
+			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
+			underTest.tokenUnlocks, underTest.marketStructureService, profileTiming(time.Second)),
+		defaultFilterHandlers(), clockProxy))
+
+	_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
+
+	require.NoError(t, filterError)
+	assert.Equal(t, "passed", verdictOf(underTest.savedResult(t, "PENGU"), "priceChange").Outcome)
+	assert.Equal(t, "passed", verdictOf(underTest.savedResult(t, "STRK"), "priceChange").Outcome)
+}
+
 func TestFilterCoinCandidatesJudgesMomentumFromThePerpetualAsItTradesNow(t *testing.T) {
 	fallingRatio := decimal.RequireFromString("-0.2")
 	risingRatio := decimal.RequireFromString("0.12")

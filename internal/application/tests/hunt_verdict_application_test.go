@@ -435,6 +435,15 @@ func TestSynthesizeHuntVerdictsWithoutABullishInsightAsksNobodyAndEmptiesTheBoar
 	assert.Empty(t, underTest.rewrittenBoard)
 }
 
+func answerConfidence(answers []vo.HuntVerdictAnswerVo, coinSymbol string) int {
+	for _, answer := range answers {
+		if answer.CoinSymbol == coinSymbol {
+			return answer.Confidence
+		}
+	}
+	return -1
+}
+
 func TestSynthesizeHuntVerdictsPutsOnlyConfidentLongsOnTheBoard(t *testing.T) {
 	answer := func(coinSymbol string, action string, confidence int) vo.HuntVerdictAnswerVo {
 		answer := longAnswer(coinSymbol)
@@ -472,6 +481,8 @@ func TestSynthesizeHuntVerdictsPutsOnlyConfidentLongsOnTheBoard(t *testing.T) {
 			savedActions := map[string]string{}
 			for _, coinVerdict := range underTest.savedCoinVerdicts {
 				savedActions[coinVerdict.CoinSymbol] = coinVerdict.Action
+				// A verdict kept off the board is kept in history exactly as judged.
+				assert.Equal(t, answerConfidence(testCase.answers, coinVerdict.CoinSymbol), coinVerdict.Confidence, coinVerdict.CoinSymbol)
 			}
 			assert.Equal(t, testCase.wantSavedAction, savedActions)
 		})

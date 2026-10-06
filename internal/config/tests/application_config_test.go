@@ -178,3 +178,16 @@ func TestLoadReadsTheMomentumThresholds(t *testing.T) {
 	assert.Equal(t, "0", filteringConfig.MinimumOpenInterestChangeRatio.String())
 	assert.Equal(t, "0.001", filteringConfig.MaximumFundingRate.String())
 }
+
+func TestLoadFallsBackWhenThePriceChangeFloorIsAboveItsCeiling(t *testing.T) {
+	t.Setenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO", "0.5")
+	t.Setenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO", "0.2")
+
+	filteringConfig := config.Load().Filtering
+
+	assert.Equal(t, "-0.1", filteringConfig.MinimumPriceChangeRatio.String())
+	assert.Equal(t, "0.6", filteringConfig.MaximumPriceChangeRatio.String())
+
+	t.Setenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO", "0.2")
+	assert.Equal(t, "0.2", config.Load().Filtering.MinimumPriceChangeRatio.String(), "a floor equal to its ceiling is kept")
+}

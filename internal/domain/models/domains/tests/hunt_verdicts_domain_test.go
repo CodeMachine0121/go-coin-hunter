@@ -190,3 +190,18 @@ func TestBullishFocusPutsOnlyConfidentLongsOnTheHuntBoard(t *testing.T) {
 	assert.Empty(t, domains.NewBullishFocusDomain(verdictPolicy()).ToHuntBoardEntries(
 		[]entities.CoinVerdict{{CoinSymbol: "STRK", Action: "watch"}}, calculatedAt))
 }
+
+func TestBullishFocusKeepsItsThresholdsOnTheirScales(t *testing.T) {
+	offScale := verdictPolicy()
+	offScale.MinimumBullishInsightStrength, offScale.MinimumHuntBoardConfidence = 11, 150
+	strictest := domains.NewBullishFocusDomain(offScale)
+
+	assert.Len(t, strictest.SelectBullishInsights([]entities.CoinInsight{insight("PENGU", true, "bullish", 10)}), 1, "a strength over 10 is read as 10")
+	assert.Len(t, strictest.ToHuntBoardEntries([]entities.CoinVerdict{{CoinSymbol: "PENGU", Action: "long", Confidence: 100}}, receivedAt), 1,
+		"a confidence over 100 is read as 100")
+
+	offScale.MinimumBullishInsightStrength, offScale.MinimumHuntBoardConfidence = -3, -20
+	loosest := domains.NewBullishFocusDomain(offScale)
+	assert.Empty(t, loosest.SelectBullishInsights([]entities.CoinInsight{insight("PENGU", true, "bullish", 0)}), "a strength under 1 is read as 1")
+	assert.Len(t, loosest.ToHuntBoardEntries([]entities.CoinVerdict{{CoinSymbol: "PENGU", Action: "long", Confidence: 0}}, receivedAt), 1)
+}

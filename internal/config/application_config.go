@@ -149,6 +149,8 @@ const defaultExcludedCoinSymbols = "BTC,ETH,BNB,SOL,XRP,USDT,USDC,FDUSD,DAI,TUSD
 
 // Load reads the process environment once at startup; every setting has a default so an empty .env still boots.
 func Load() ApplicationConfig {
+	minimumPriceChangeRatio, maximumPriceChangeRatio := parseDecimalRangeWithDefault(
+		os.Getenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO"), os.Getenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO"), "-0.1", "0.6")
 	return ApplicationConfig{
 		ServerAddress: cmp.Or(os.Getenv("SERVER_ADDRESS"), ":8080"),
 		Database: DatabaseConfig{
@@ -207,8 +209,8 @@ func Load() ApplicationConfig {
 			MinimumCirculatingRatio:         parsePositiveDecimalWithDefault(os.Getenv("FILTER_MINIMUM_CIRCULATING_RATIO"), "0.2"),
 			UnlockLookahead:                 time.Duration(parsePositiveIntWithDefault(os.Getenv("FILTER_UNLOCK_LOOKAHEAD_DAYS"), 14)) * 24 * time.Hour,
 			MaximumUnlockRatioOfCirculating: parsePositiveDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_UNLOCK_RATIO"), "0.05"),
-			MinimumPriceChangeRatio:         parseDecimalWithDefault(os.Getenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO"), "-0.1"),
-			MaximumPriceChangeRatio:         parseDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO"), "0.6"),
+			MinimumPriceChangeRatio:         minimumPriceChangeRatio,
+			MaximumPriceChangeRatio:         maximumPriceChangeRatio,
 			MinimumOpenInterestChangeRatio:  parseDecimalWithDefault(os.Getenv("FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO"), "-0.1"),
 			MaximumFundingRate:              parseDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_FUNDING_RATE"), "0.001"),
 			MarketStructureBudget:           filteringMarketStructureBudget,
@@ -268,6 +270,17 @@ func parseDecimalWithDefault(rawValue string, defaultValue string) decimal.Decim
 	}
 
 	return parsedValue
+}
+
+// parseDecimalRangeWithDefault reads a floor and a ceiling; a floor above its ceiling would reject everything, so the
+// pair falls back to the defaults together.
+func parseDecimalRangeWithDefault(rawMinimum string, rawMaximum string, defaultMinimum string, defaultMaximum string) (decimal.Decimal, decimal.Decimal) {
+	minimum, maximum := parseDecimalWithDefault(rawMinimum, defaultMinimum), parseDecimalWithDefault(rawMaximum, defaultMaximum)
+	if minimum.GreaterThan(maximum) {
+		return decimal.RequireFromString(defaultMinimum), decimal.RequireFromString(defaultMaximum)
+	}
+
+	return minimum, maximum
 }
 
 func parseCommaSeparated(rawValue string) []string {

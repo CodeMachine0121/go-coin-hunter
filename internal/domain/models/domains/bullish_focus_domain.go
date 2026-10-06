@@ -14,10 +14,12 @@ type BullishFocusDomain struct {
 	minimumHuntBoardConfidence    int
 }
 
+// NewBullishFocusDomain keeps the thresholds on the scales they are compared with: a strength of 1–10 and a confidence of
+// 0–100. A threshold off its scale would silently keep everything or nothing.
 func NewBullishFocusDomain(huntVerdictPolicy vo.HuntVerdictPolicyVo) BullishFocusDomain {
 	return BullishFocusDomain{
-		minimumBullishInsightStrength: huntVerdictPolicy.MinimumBullishInsightStrength,
-		minimumHuntBoardConfidence:    huntVerdictPolicy.MinimumHuntBoardConfidence,
+		minimumBullishInsightStrength: min(max(huntVerdictPolicy.MinimumBullishInsightStrength, minimumInsightStrength), maximumInsightStrength),
+		minimumHuntBoardConfidence:    min(max(huntVerdictPolicy.MinimumHuntBoardConfidence, minimumVerdictConfidence), maximumVerdictConfidence),
 	}
 }
 

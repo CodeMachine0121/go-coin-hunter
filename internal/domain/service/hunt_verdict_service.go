@@ -77,13 +77,21 @@ func (huntVerdictService *HuntVerdictService) SynthesizeHuntVerdicts(
 		return dto.PipelineRunDto{}, fmt.Errorf("record verdict run: %w", createError)
 	}
 
-	// Every bullish coin is shown with the market as it is now.
+	// Every bullish coin is shown with the market as it is now, all coins asked for at once.
 	bullishFocus := domains.NewBullishFocusDomain(huntVerdictService.huntVerdictPolicy)
+	bullishInsights := bullishFocus.SelectBullishInsights(coinInsights)
+	bullishCoinSymbols := make([]string, 0, len(bullishInsights))
+	for _, bullishInsight := range bullishInsights {
+		bullishCoinSymbols = append(bullishCoinSymbols, bullishInsight.CoinSymbol)
+	}
+	marketStructures := huntVerdictService.perpetualMarketStructureService.FindMarketStructures(executionContext, bullishCoinSymbols)
 	materials := []vo.HuntVerdictMaterialVo{}
-	for _, coinInsight := range bullishFocus.SelectBullishInsights(coinInsights) {
+	for _, coinInsight := range bullishInsights {
 		material := vo.HuntVerdictMaterialVo{CoinSymbol: coinInsight.CoinSymbol, Direction: coinInsight.Direction, Strength: coinInsight.Strength,
-			Catalyst: coinInsight.Catalyst, Risks: coinInsight.Risks, Evidence: coinInsight.Evidence, DataGaps: coinInsight.DataGaps,
-			MarketStructure: huntVerdictService.perpetualMarketStructureService.FindMarketStructure(executionContext, coinInsight.CoinSymbol)}
+			Catalyst: coinInsight.Catalyst, Risks: coinInsight.Risks, Evidence: coinInsight.Evidence, DataGaps: coinInsight.DataGaps}
+		if marketStructure, found := marketStructures[coinInsight.CoinSymbol]; found {
+			material.MarketStructure = &marketStructure
+		}
 		materials = append(materials, material)
 	}
 

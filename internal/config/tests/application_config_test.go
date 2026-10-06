@@ -84,7 +84,7 @@ func TestLoadVerdictSettings(t *testing.T) {
 	t.Setenv("HUNT_BOARD_MINIMUM_CONFIDENCE", "")
 
 	assert.Equal(t, config.VerdictConfig{Model: "claude-opus-5-5", Effort: "high", SynthesisTimeout: 180 * time.Second,
-		MarketSourceTimeout: 15 * time.Second, MinimumBullishInsightStrength: 6, MinimumHuntBoardConfidence: 50}, config.Load().Verdict)
+		MinimumBullishInsightStrength: 6, MinimumHuntBoardConfidence: 50}, config.Load().Verdict)
 
 	t.Setenv("VERDICT_MODEL", "claude-sonnet-5-5")
 	t.Setenv("VERDICT_EFFORT", "xhigh")
@@ -164,7 +164,8 @@ func TestLoadReadsTheMomentumThresholds(t *testing.T) {
 	assert.Equal(t, "0.6", filteringConfig.MaximumPriceChangeRatio.String())
 	assert.Equal(t, "-0.1", filteringConfig.MinimumOpenInterestChangeRatio.String())
 	assert.Equal(t, "0.001", filteringConfig.MaximumFundingRate.String())
-	assert.Equal(t, 15*time.Second, filteringConfig.MarketStructureRequestTimeout)
+	assert.Equal(t, 60*time.Second, filteringConfig.MarketStructureBudget)
+	assert.Equal(t, config.MarketStructureConfig{RequestTimeout: 15 * time.Second, MaximumConcurrentLookups: 5}, config.Load().MarketStructure)
 
 	t.Setenv("FILTER_MINIMUM_PRICE_CHANGE_RATIO", "-0.2")
 	t.Setenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO", "1")

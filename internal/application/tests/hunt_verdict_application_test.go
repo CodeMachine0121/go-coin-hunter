@@ -113,7 +113,7 @@ func newHuntVerdictUnderTestWith(t *testing.T, coinInsights []entities.CoinInsig
 	clockProxy.EXPECT().Now().Return(verdictStartedAt).AnyTimes()
 	underTest.huntVerdictApplication = application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 		underTest.pipelineRunRepository, underTest.coinInsights, underTest.coinVerdicts, underTest.huntBoard,
-		service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket, underTest.bybitMarket}, time.Second),
+		service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket, underTest.bybitMarket}, time.Second, 5),
 		underTest.strategist, clockProxy, huntVerdictPolicy()))
 
 	return underTest
@@ -270,7 +270,7 @@ func TestSynthesizeHuntVerdictsSurfacesStorageFailures(t *testing.T) {
 			clockProxy.EXPECT().Now().Return(verdictStartedAt).AnyTimes()
 			huntVerdictApplication := application.NewHuntVerdictApplication(service.NewHuntVerdictService(
 				underTest.pipelineRunRepository, underTest.coinInsights, coinVerdicts, huntBoard,
-				service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second), underTest.strategist, clockProxy, huntVerdictPolicy()))
+				service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second, 5), underTest.strategist, clockProxy, huntVerdictPolicy()))
 
 			_, synthesizeError := huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
 
@@ -332,7 +332,7 @@ func TestSynthesizeHuntVerdictsSurfacesStorageFailures(t *testing.T) {
 			clockProxy := mocks.NewMockIClockProxy(controller)
 			clockProxy.EXPECT().Now().Return(verdictStartedAt).AnyTimes()
 			huntVerdictApplication := application.NewHuntVerdictApplication(service.NewHuntVerdictService(
-				pipelineRuns, insights, verdicts, huntBoard, service.NewPerpetualMarketStructureService(nil, time.Second), strategist, clockProxy, huntVerdictPolicy()))
+				pipelineRuns, insights, verdicts, huntBoard, service.NewPerpetualMarketStructureService(nil, time.Second, 5), strategist, clockProxy, huntVerdictPolicy()))
 
 			_, synthesizeError := huntVerdictApplication.SynthesizeHuntVerdictsManually(context.Background())
 

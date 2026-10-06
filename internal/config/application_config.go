@@ -19,6 +19,7 @@ type ApplicationConfig struct {
 	Filtering             FilteringConfig
 	Insight               InsightConfig
 	Verdict               VerdictConfig
+	MarketStructure       MarketStructureConfig
 	// HuntPipelineInterval is how often the scheduled hunt round runs; zero or less switches the schedule off.
 	HuntPipelineInterval time.Duration
 	// ShutdownGracePeriod is how long shutdown waits for the step in flight before abandoning it; an abandoned step's
@@ -28,10 +29,9 @@ type ApplicationConfig struct {
 
 // VerdictConfig holds the chief investment officer's model settings; the API key is shared with the insight step.
 type VerdictConfig struct {
-	Model               string
-	Effort              string
-	SynthesisTimeout    time.Duration
-	MarketSourceTimeout time.Duration
+	Model            string
+	Effort           string
+	SynthesisTimeout time.Duration
 	// MinimumBullishInsightStrength is the weakest bullish insight still handed to the chief investment officer.
 	MinimumBullishInsightStrength int
 	// MinimumHuntBoardConfidence is the least confidence a long verdict needs to be put on the hunt board.
@@ -76,6 +76,13 @@ func (databaseConfig DatabaseConfig) DataSourceName() string {
 	)
 }
 
+// MarketStructureConfig is how every step asks the exchanges about a perpetual: one timeout per exchange and a cap on
+// lookups at once, so a batch of coins stays inside the free request rates. Both are fixed rules, not operator settings.
+type MarketStructureConfig struct {
+	RequestTimeout           time.Duration
+	MaximumConcurrentLookups int
+}
+
 // DiscoveryConfig holds the discovery rules and where each free information source lives.
 type DiscoveryConfig struct {
 	Window               time.Duration
@@ -104,9 +111,9 @@ type FilteringConfig struct {
 	MaximumPriceChangeRatio        decimal.Decimal
 	MinimumOpenInterestChangeRatio decimal.Decimal
 	MaximumFundingRate             decimal.Decimal
-	// MarketStructureRequestTimeout bounds asking one exchange for one coin's perpetual.
-	MarketStructureRequestTimeout time.Duration
-	SourceRequestTimeout          time.Duration
+	// MarketStructureBudget bounds looking up every candidate's perpetual in one filtering round.
+	MarketStructureBudget time.Duration
+	SourceRequestTimeout  time.Duration
 	// RoundBaseBudget bounds gathering a round's data, before the allowance each security lookup adds.
 	RoundBaseBudget time.Duration
 	// TokenSecurityRequestInterval spaces token security lookups to stay inside the free request rate.
@@ -121,8 +128,12 @@ const (
 	informationSourceRequestTimeout = 15 * time.Second
 	// filteringSourceRequestTimeout is longer than discovery's: the coin list and contract lists are large answers.
 	filteringSourceRequestTimeout = 20 * time.Second
-	// filteringMarketStructureRequestTimeout matches the insight step's: one coin's perpetual is a small answer.
-	filteringMarketStructureRequestTimeout = 15 * time.Second
+	// filteringMarketStructureBudget is how long one filtering round may spend asking the exchanges about its perpetuals.
+	filteringMarketStructureBudget = 60 * time.Second
+	// marketStructureRequestTimeout bounds asking one exchange about one coin's perpetual, a small answer.
+	marketStructureRequestTimeout = 15 * time.Second
+	// marketStructureMaximumConcurrentLookups keeps a batch of coins well inside the exchanges' free request rates.
+	marketStructureMaximumConcurrentLookups = 5
 	// filteringRoundBaseBudget is the agreed round time before security lookups: 60 seconds.
 	filteringRoundBaseBudget = 60 * time.Second
 	// tokenSecurityRequestInterval keeps token security lookups near the free tier's thirty per minute.
@@ -175,13 +186,16 @@ func Load() ApplicationConfig {
 			NewsLookback:                 72 * time.Hour,
 			MaterialSourceTimeout:        15 * time.Second,
 		},
+		MarketStructure: MarketStructureConfig{
+			RequestTimeout:           marketStructureRequestTimeout,
+			MaximumConcurrentLookups: marketStructureMaximumConcurrentLookups,
+		},
 		HuntPipelineInterval: time.Duration(parseIntWithDefault(os.Getenv("HUNT_PIPELINE_INTERVAL_HOURS"), 4)) * time.Hour,
 		ShutdownGracePeriod:  time.Duration(parsePositiveIntWithDefault(os.Getenv("SHUTDOWN_GRACE_MINUTES"), 15)) * time.Minute,
 		Verdict: VerdictConfig{
 			Model:                         cmp.Or(os.Getenv("VERDICT_MODEL"), "claude-opus-5-5"),
 			Effort:                        cmp.Or(os.Getenv("VERDICT_EFFORT"), "high"),
 			SynthesisTimeout:              verdictSynthesisTimeout,
-			MarketSourceTimeout:           15 * time.Second,
 			MinimumBullishInsightStrength: parsePositiveIntWithDefault(os.Getenv("VERDICT_MINIMUM_BULLISH_INSIGHT_STRENGTH"), 6),
 			MinimumHuntBoardConfidence:    parseIntWithDefault(os.Getenv("HUNT_BOARD_MINIMUM_CONFIDENCE"), 50),
 		},
@@ -197,7 +211,7 @@ func Load() ApplicationConfig {
 			MaximumPriceChangeRatio:         parseDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_PRICE_CHANGE_RATIO"), "0.6"),
 			MinimumOpenInterestChangeRatio:  parseDecimalWithDefault(os.Getenv("FILTER_MINIMUM_OPEN_INTEREST_CHANGE_RATIO"), "-0.1"),
 			MaximumFundingRate:              parseDecimalWithDefault(os.Getenv("FILTER_MAXIMUM_FUNDING_RATE"), "0.001"),
-			MarketStructureRequestTimeout:   filteringMarketStructureRequestTimeout,
+			MarketStructureBudget:           filteringMarketStructureBudget,
 			SourceRequestTimeout:            filteringSourceRequestTimeout,
 			RoundBaseBudget:                 filteringRoundBaseBudget,
 			TokenSecurityRequestInterval:    tokenSecurityRequestInterval,

@@ -104,7 +104,7 @@ func newCoinInsightUnderTest(t *testing.T, policy vo.CoinInsightPolicyVo, keptSy
 	underTest.coinInsightApplication = application.NewCoinInsightApplication(service.NewCoinInsightService(
 		underTest.pipelineRunRepository, coinCandidateRepository, underTest.coinFilterResults, underTest.coinInsights,
 		service.NewCoinInsightMaterialService(underTest.coinIntelligences, underTest.coinNews,
-			service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket, underTest.bybitMarket}, policy.SourceRequestTimeout), policy),
+			service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket, underTest.bybitMarket}, policy.SourceRequestTimeout, 5), policy),
 		underTest.analyst, clockProxy, policy))
 
 	return underTest
@@ -296,7 +296,7 @@ func TestAnalyzeCoinCandidatesSurfacesStorageFailures(t *testing.T) {
 		coinInsightApplication := application.NewCoinInsightApplication(service.NewCoinInsightService(
 			underTest.pipelineRunRepository, candidates, underTest.coinFilterResults, failingInsights,
 			service.NewCoinInsightMaterialService(underTest.coinIntelligences, underTest.coinNews,
-				service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second), insightPolicy()),
+				service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second, 5), insightPolicy()),
 			underTest.analyst, clockProxy, insightPolicy()))
 
 		_, analyzeError := coinInsightApplication.AnalyzeCoinCandidatesManually(context.Background())
@@ -357,7 +357,7 @@ func TestAnalyzeCoinCandidatesSurfacesStorageFailures(t *testing.T) {
 			clockProxy.EXPECT().Now().Return(insightStartedAt).AnyTimes()
 			coinInsightApplication := application.NewCoinInsightApplication(service.NewCoinInsightService(
 				pipelineRuns, candidates, results, insights,
-				service.NewCoinInsightMaterialService(intelligences, nil, service.NewPerpetualMarketStructureService(nil, time.Second), insightPolicy()), nil, clockProxy, insightPolicy()))
+				service.NewCoinInsightMaterialService(intelligences, nil, service.NewPerpetualMarketStructureService(nil, time.Second, 5), insightPolicy()), nil, clockProxy, insightPolicy()))
 
 			_, analyzeError := coinInsightApplication.AnalyzeCoinCandidatesManually(context.Background())
 
@@ -463,7 +463,7 @@ func TestAnalyzeCoinCandidatesShowsAtMostTheHeadlineLimit(t *testing.T) {
 	coinInsightApplication := application.NewCoinInsightApplication(service.NewCoinInsightService(
 		underTest.pipelineRunRepository, candidates, underTest.coinFilterResults, underTest.coinInsights,
 		service.NewCoinInsightMaterialService(coinIntelligences, underTest.coinNews,
-			service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second), insightPolicy()),
+			service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{underTest.binanceMarket}, time.Second, 5), insightPolicy()),
 		underTest.analyst, clockProxy, insightPolicy()))
 
 	_, analyzeError := coinInsightApplication.AnalyzeCoinCandidatesManually(context.Background())

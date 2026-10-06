@@ -53,7 +53,9 @@ func filterHandlersFor(filteringConfig config.FilteringConfig) []domaininterface
 }
 
 // coinProfileServiceFor wires the filtering data sources; market data sources are listed in priority order.
-func coinProfileServiceFor(database *gorm.DB, applicationConfig config.ApplicationConfig) *service.CoinProfileService {
+func coinProfileServiceFor(
+	database *gorm.DB, applicationConfig config.ApplicationConfig, perpetualMarketStructureService *service.PerpetualMarketStructureService,
+) *service.CoinProfileService {
 	// No client-wide timeout: each call runs under the service's own per-source deadline.
 	httpClient := &http.Client{}
 
@@ -70,12 +72,12 @@ func coinProfileServiceFor(database *gorm.DB, applicationConfig config.Applicati
 			marketdata.NewOkxPerpetualContractListingProxy(httpClient, applicationConfig.Discovery.OkxBaseUrl),
 		},
 		marketdata.NewDefiLlamaTokenUnlockScheduleProxy(httpClient, applicationConfig.Filtering.DefiLlamaDatasetsBaseUrl),
-		service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
-			applicationConfig.Filtering.MarketStructureRequestTimeout),
+		perpetualMarketStructureService,
 		vo.CoinProfileTimingVo{
 			SourceRequestTimeout:    applicationConfig.Filtering.SourceRequestTimeout,
 			RoundBaseBudget:         applicationConfig.Filtering.RoundBaseBudget,
 			SecurityLookupAllowance: applicationConfig.Filtering.TokenSecurityRequestInterval,
+			MarketStructureBudget:   applicationConfig.Filtering.MarketStructureBudget,
 		},
 	)
 }
@@ -87,6 +89,14 @@ func perpetualMarketStructureProxiesFor(httpClient *http.Client, discoveryConfig
 		marketdata.NewBybitPerpetualMarketStructureProxy(httpClient, discoveryConfig.BybitBaseUrl),
 		marketdata.NewOkxPerpetualMarketStructureProxy(httpClient, discoveryConfig.OkxBaseUrl),
 	}
+}
+
+// perpetualMarketStructureServiceFor is the one way filtering, insight and verdict ask about a perpetual, so they share
+// the exchanges' timeout and the cap on lookups at once.
+func perpetualMarketStructureServiceFor(applicationConfig config.ApplicationConfig) *service.PerpetualMarketStructureService {
+	// No client-wide timeout: each call runs under the service's own per-exchange deadline.
+	return service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
+		applicationConfig.MarketStructure.RequestTimeout, applicationConfig.MarketStructure.MaximumConcurrentLookups)
 }
 
 // coinInsightPolicyFor shows the analyst the intelligence of the discovery window itself, so the two never disagree.
@@ -105,6 +115,7 @@ func coinInsightPolicyFor(applicationConfig config.ApplicationConfig) vo.CoinIns
 // coinInsightServiceFor wires the analyst and its material sources; market structure exchanges are listed in priority order.
 func coinInsightServiceFor(
 	database *gorm.DB, applicationConfig config.ApplicationConfig, clockProxy *clock.SystemClockProxy, claudeAnalysisProxy *analysis.ClaudeAnalysisProxy,
+	perpetualMarketStructureService *service.PerpetualMarketStructureService,
 ) *service.CoinInsightService {
 	httpClient := &http.Client{}
 	coinInsightPolicy := coinInsightPolicyFor(applicationConfig)
@@ -117,8 +128,7 @@ func coinInsightServiceFor(
 		service.NewCoinInsightMaterialService(
 			persistence.NewCoinIntelligenceRepository(database),
 			news.NewGoogleNewsCoinNewsProxy(httpClient, applicationConfig.Insight.GoogleNewsBaseUrl),
-			service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(httpClient, applicationConfig.Discovery),
-				applicationConfig.Insight.MaterialSourceTimeout),
+			perpetualMarketStructureService,
 			coinInsightPolicy,
 		),
 		claudeAnalysisProxy,
@@ -190,6 +200,7 @@ func servicesFor(database *gorm.DB, applicationConfig config.ApplicationConfig) 
 	claudeAnalysisProxy := analysis.NewClaudeAnalysisProxy(applicationConfig.Insight.AnthropicApiKey, applicationConfig.Insight.AnthropicBaseUrl,
 		insightModelSettings, verdictModelSettings)
 	coinCandidateRepository := persistence.NewCoinCandidateRepository(database)
+	perpetualMarketStructureService := perpetualMarketStructureServiceFor(applicationConfig)
 
 	return services{
 		coinDiscovery: service.NewCoinDiscoveryService(
@@ -210,18 +221,17 @@ func servicesFor(database *gorm.DB, applicationConfig config.ApplicationConfig) 
 			pipelineRunRepository,
 			coinCandidateRepository,
 			persistence.NewCoinFilterResultRepository(database),
-			coinProfileServiceFor(database, applicationConfig),
+			coinProfileServiceFor(database, applicationConfig, perpetualMarketStructureService),
 			filterHandlersFor(applicationConfig.Filtering),
 			clockProxy,
 		),
-		coinInsight: coinInsightServiceFor(database, applicationConfig, clockProxy, claudeAnalysisProxy),
+		coinInsight: coinInsightServiceFor(database, applicationConfig, clockProxy, claudeAnalysisProxy, perpetualMarketStructureService),
 		huntVerdict: service.NewHuntVerdictService(
 			pipelineRunRepository,
 			persistence.NewCoinInsightRepository(database),
 			persistence.NewCoinVerdictRepository(database),
 			persistence.NewHuntBoardRepository(database),
-			service.NewPerpetualMarketStructureService(perpetualMarketStructureProxiesFor(&http.Client{}, applicationConfig.Discovery),
-				applicationConfig.Verdict.MarketSourceTimeout),
+			perpetualMarketStructureService,
 			claudeAnalysisProxy,
 			clockProxy,
 			huntVerdictPolicyFor(applicationConfig.Verdict),

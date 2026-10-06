@@ -107,7 +107,7 @@ func newCoinFilteringUnderTest(t *testing.T, candidateSymbols ...string) *coinFi
 			return marketStructure, found, nil
 		}).AnyTimes()
 	underTest.marketStructureService = service.NewPerpetualMarketStructureService(
-		[]domaininterface.IPerpetualMarketStructureProxy{marketStructureProxy}, time.Second)
+		[]domaininterface.IPerpetualMarketStructureProxy{marketStructureProxy}, time.Second, 5)
 	coinCandidates := []entities.CoinCandidate{}
 	for _, candidateSymbol := range candidateSymbols {
 		coinCandidates = append(coinCandidates, entities.CoinCandidate{PipelineRunID: latestDiscoveryRunID, CoinSymbol: candidateSymbol})
@@ -592,7 +592,8 @@ func TestFilterCoinCandidatesChecksOnlyTheDeclaredContract(t *testing.T) {
 
 // profileTiming gives each source the timeout and leaves the round budgets out of the way.
 func profileTiming(sourceRequestTimeout time.Duration) vo.CoinProfileTimingVo {
-	return vo.CoinProfileTimingVo{SourceRequestTimeout: sourceRequestTimeout, RoundBaseBudget: time.Minute, SecurityLookupAllowance: 2 * time.Second}
+	return vo.CoinProfileTimingVo{SourceRequestTimeout: sourceRequestTimeout, RoundBaseBudget: time.Minute, SecurityLookupAllowance: 2 * time.Second,
+		MarketStructureBudget: time.Minute}
 }
 
 func TestFilterCoinCandidatesStaysInsideTheRoundBudget(t *testing.T) {
@@ -620,7 +621,7 @@ func TestFilterCoinCandidatesStaysInsideTheRoundBudget(t *testing.T) {
 		service.NewCoinProfileService(underTest.coinIntelligences,
 			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
 			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
-			underTest.tokenUnlocks, underTest.marketStructureService, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: 100 * time.Millisecond, SecurityLookupAllowance: 50 * time.Millisecond}),
+			underTest.tokenUnlocks, underTest.marketStructureService, vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: 100 * time.Millisecond, SecurityLookupAllowance: 50 * time.Millisecond, MarketStructureBudget: time.Second}),
 		defaultFilterHandlers(), clockProxy))
 	startedAt := time.Now()
 
@@ -655,7 +656,7 @@ func TestFilterCoinCandidatesAsksForEveryCoinsMarketStructureAtOnce(t *testing.T
 			}
 		}).Times(2)
 	underTest.marketStructureService = service.NewPerpetualMarketStructureService(
-		[]domaininterface.IPerpetualMarketStructureProxy{barrierProxy}, 500*time.Millisecond)
+		[]domaininterface.IPerpetualMarketStructureProxy{barrierProxy}, 500*time.Millisecond, 5)
 	clockProxy := mocks.NewMockIClockProxy(gomock.NewController(t))
 	clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
 	coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
@@ -702,4 +703,38 @@ func TestFilterCoinCandidatesJudgesMomentumFromThePerpetualAsItTradesNow(t *test
 	assert.ElementsMatch(t, []string{"PENGU", "STRK"}, underTest.queriedMarketStructures)
 	assert.Equal(t, entities.CoinFilterVerdictRecord{FilterName: "priceChange", Outcome: "noData", Reason: "查不到永續合約市場結構"},
 		verdictOf(underTest.savedResult(t, "ARB"), "priceChange"))
+}
+
+func TestFilterCoinCandidatesLooksUpMarketStructuresUnderTheirOwnBudget(t *testing.T) {
+	underTest := newCoinFilteringUnderTest(t, "PENGU")
+	underTest.answerMarketData(map[string]vo.CoinMarketDataVo{"PENGU": healthyMarketData("pengu")}, map[string]vo.CoinMarketDataVo{})
+	underTest.answerListings(map[string]bool{"PENGU": true}, map[string]bool{}, map[string]bool{})
+	underTest.answerUnlocks(map[string][]vo.TokenUnlockEventVo{})
+	risingRatio := decimal.RequireFromString("0.12")
+	// The exchange honours its deadline: asked under a spent context, it has nothing to say.
+	exchange := mocks.NewMockIPerpetualMarketStructureProxy(gomock.NewController(t))
+	exchange.EXPECT().FindMarketStructure(gomock.Any(), "PENGU").DoAndReturn(
+		func(lookupContext context.Context, _ string) (vo.PerpetualMarketStructureVo, bool, error) {
+			if lookupContext.Err() != nil {
+				return vo.PerpetualMarketStructureVo{}, false, lookupContext.Err()
+			}
+			return vo.PerpetualMarketStructureVo{ExchangeName: "幣安", PriceChangeRatio24h: &risingRatio}, true, nil
+		})
+	clockProxy := mocks.NewMockIClockProxy(gomock.NewController(t))
+	clockProxy.EXPECT().Now().Return(filteringStartedAt).AnyTimes()
+	// The base budget is spent before the market structures are asked for; they still get their own minute.
+	coinFilteringApplication := application.NewCoinFilteringApplication(service.NewCoinFilteringService(
+		underTest.pipelineRunRepository, underTest.coinCandidateRepository, underTest.coinFilterResults,
+		service.NewCoinProfileService(underTest.coinIntelligences,
+			[]domaininterface.ICoinMarketDataProxy{underTest.primaryMarketData, underTest.fallbackMarketData}, underTest.tokenSecurity,
+			[]domaininterface.IPerpetualContractListingProxy{underTest.binanceListing, underTest.bybitListing, underTest.okxListing},
+			underTest.tokenUnlocks,
+			service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{exchange}, time.Second, 5),
+			vo.CoinProfileTimingVo{SourceRequestTimeout: time.Second, RoundBaseBudget: time.Nanosecond, MarketStructureBudget: time.Minute}),
+		defaultFilterHandlers(), clockProxy))
+
+	_, filterError := coinFilteringApplication.FilterCoinCandidatesManually(context.Background())
+
+	require.NoError(t, filterError)
+	assert.Equal(t, "passed", verdictOf(underTest.savedResult(t, "PENGU"), "priceChange").Outcome)
 }

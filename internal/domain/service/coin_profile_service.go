@@ -163,18 +163,25 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 		coinProfiles = append(coinProfiles, coinProfile)
 	}
 
-	// Market structure: only a coin with a perpetual has one, and each coin is asked at once. An exchange that cannot
-	// answer is no data for the momentum rules rather than a failed round: it is per coin, not the whole round's footing.
-	for index := range coinProfiles {
-		if len(coinProfiles[index].PerpetualContractExchanges) == 0 {
-			continue
+	// Market structure: only a coin with a perpetual has one. The lookups run beside the security and unlock lookups under
+	// their own budget, so neither eats the other's time; an exchange that cannot answer is no data for the momentum rules
+	// rather than a failed round, since it is per coin and not the whole round's footing.
+	perpetualCoinSymbols := []string{}
+	for _, coinProfile := range coinProfiles {
+		if len(coinProfile.PerpetualContractExchanges) > 0 {
+			perpetualCoinSymbols = append(perpetualCoinSymbols, coinProfile.CoinSymbol)
 		}
-		waitGroup.Go(func() {
-			coinProfiles[index].MarketStructure = coinProfileService.perpetualMarketStructureService.FindMarketStructure(
-				baseContext, coinProfiles[index].CoinSymbol)
-		})
 	}
-	waitGroup.Wait()
+	marketStructureContext, cancelMarketStructures := context.WithTimeout(executionContext, coinProfileService.coinProfileTiming.MarketStructureBudget)
+	defer cancelMarketStructures()
+	marketStructuresFound := make(chan map[string]vo.PerpetualMarketStructureVo, 1)
+	go func() {
+		if len(perpetualCoinSymbols) == 0 {
+			marketStructuresFound <- map[string]vo.PerpetualMarketStructureVo{}
+			return
+		}
+		marketStructuresFound <- coinProfileService.perpetualMarketStructureService.FindMarketStructures(marketStructureContext, perpetualCoinSymbols)
+	}()
 
 	securityLookupCount := 0
 	for _, coinProfile := range coinProfiles {
@@ -219,6 +226,13 @@ func (coinProfileService *CoinProfileService) AssembleCoinProfiles(
 				coinProfiles[index].UnlockScheduleKnown = true
 				coinProfiles[index].UnlockEvents = unlockEvents
 			}
+		}
+	}
+
+	marketStructures := <-marketStructuresFound
+	for index := range coinProfiles {
+		if marketStructure, found := marketStructures[coinProfiles[index].CoinSymbol]; found {
+			coinProfiles[index].MarketStructure = &marketStructure
 		}
 	}
 

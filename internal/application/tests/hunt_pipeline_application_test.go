@@ -151,13 +151,13 @@ func newHuntPipelineWorld(t *testing.T) *huntPipelineWorld {
 
 	clockProxy := mocks.NewMockIClockProxy(controller)
 	clockProxy.EXPECT().Now().Return(roundStartedAt).AnyTimes()
-	marketStructureService := service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{market}, time.Second)
+	marketStructureService := service.NewPerpetualMarketStructureService([]domaininterface.IPerpetualMarketStructureProxy{market}, time.Second, 5)
 	world.huntPipelineApplication = application.NewHuntPipelineApplication(
 		service.NewCoinDiscoveryService([]domaininterface.IInformationSourceProxy{world.informationSource}, pipelineRuns, outcomes, intelligences, candidates, clockProxy, discoveryPolicy()),
 		service.NewCoinFilteringService(pipelineRuns, candidates, world.coinFilterResults,
 			service.NewCoinProfileService(intelligences, []domaininterface.ICoinMarketDataProxy{marketData}, security,
 				[]domaininterface.IPerpetualContractListingProxy{listing}, unlocks,
-				service.NewPerpetualMarketStructureService(nil, time.Second), profileTiming(time.Second)),
+				service.NewPerpetualMarketStructureService(nil, time.Second, 5), profileTiming(time.Second)),
 			[]domaininterface.ICoinCandidateFilterHandler{handler.NewPerpetualContractListingFilterHandler()}, clockProxy),
 		service.NewCoinInsightService(pipelineRuns, candidates, world.coinFilterResults, insights,
 			service.NewCoinInsightMaterialService(intelligences, news, marketStructureService, insightPolicy()), world.analyst, clockProxy, insightPolicy()),
